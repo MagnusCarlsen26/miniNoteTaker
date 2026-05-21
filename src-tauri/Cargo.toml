@@ -15,6 +15,7 @@ tauri-build = { version = "2.5.1", features = [] }
 [dependencies]
 tauri = { version = "2.11.2", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2.3.1"
+tauri-plugin-single-instance = "2.4.2"
 tauri-plugin-shell = "2.3.5"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -23,4 +24,3 @@ uuid = { version = "1.18", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "6.0"
 thiserror = "2.0"
-

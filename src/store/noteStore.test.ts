@@ -1,0 +1,143 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Note } from "../types/note";
+
+vi.mock("../lib/tauri", () => ({
+  createNote: vi.fn(),
+  deleteEmptyNote: vi.fn(),
+  listNotes: vi.fn(),
+  setPinned: vi.fn(),
+  updateNote: vi.fn()
+}));
+
+import { createNote, listNotes, updateNote } from "../lib/tauri";
+import { useNoteStore } from "./noteStore";
+
+const createNoteMock = vi.mocked(createNote);
+const listNotesMock = vi.mocked(listNotes);
+const updateNoteMock = vi.mocked(updateNote);
+
+function note(overrides: Partial<Note> = {}): Note {
+  return {
+    id: "note-1",
+    content: "content",
+    pinned: false,
+    created_at: "2026-05-21T00:00:00.000Z",
+    updated_at: "2026-05-21T00:00:00.000Z",
+    ...overrides
+  };
+}
+
+function resetStore() {
+  useNoteStore.setState({
+    activeNote: null,
+    draftContent: "",
+    notes: [],
+    saveStatus: "idle",
+    saveError: null,
+    pendingSave: null
+  });
+}
+
+describe("noteStore", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetStore();
+  });
+
+  it("does not persist an empty whitespace draft", async () => {
+    useNoteStore.getState().setDraftContent("   \n\t");
+
+    await useNoteStore.getState().saveDraft();
+
+    expect(createNoteMock).not.toHaveBeenCalled();
+    expect(useNoteStore.getState().saveStatus).toBe("idle");
+  });
+
+  it("creates a note for a new non-empty draft", async () => {
+    const saved = note({ content: "hello" });
+    createNoteMock.mockResolvedValue(saved);
+    useNoteStore.getState().setDraftContent("hello");
+
+    await useNoteStore.getState().saveDraft();
+
+    expect(createNoteMock).toHaveBeenCalledWith("hello");
+    expect(useNoteStore.getState().activeNote).toEqual(saved);
+    expect(useNoteStore.getState().notes).toEqual([saved]);
+    expect(useNoteStore.getState().saveStatus).toBe("saved");
+  });
+
+  it("updates an existing note instead of creating", async () => {
+    const existing = note({ id: "existing", content: "before" });
+    const saved = note({ id: "existing", content: "after" });
+    updateNoteMock.mockResolvedValue(saved);
+    useNoteStore.getState().setActiveNote(existing);
+    useNoteStore.getState().setDraftContent("after");
+
+    await useNoteStore.getState().saveDraft();
+
+    expect(updateNoteMock).toHaveBeenCalledWith("existing", "after");
+    expect(createNoteMock).not.toHaveBeenCalled();
+    expect(useNoteStore.getState().activeNote).toEqual(saved);
+  });
+
+  it("preserves draft in memory when save fails", async () => {
+    createNoteMock.mockRejectedValue(new Error("offline"));
+    useNoteStore.getState().setDraftContent("unsaved");
+
+    await useNoteStore.getState().saveDraft();
+
+    expect(useNoteStore.getState().draftContent).toBe("unsaved");
+    expect(useNoteStore.getState().pendingSave).toEqual({
+      noteId: null,
+      content: "unsaved",
+      pinned: undefined
+    });
+    expect(useNoteStore.getState().saveStatus).toBe("error");
+  });
+
+  it("retries pending save and clears retry state", async () => {
+    const saved = note({ id: "retry", content: "pending" });
+    createNoteMock.mockResolvedValue(saved);
+    useNoteStore.setState({
+      draftContent: "pending",
+      pendingSave: { noteId: null, content: "pending" },
+      saveStatus: "error"
+    });
+
+    await useNoteStore.getState().retryPendingSave();
+
+    expect(createNoteMock).toHaveBeenCalledWith("pending");
+    expect(useNoteStore.getState().pendingSave).toBeNull();
+    expect(useNoteStore.getState().saveStatus).toBe("saved");
+  });
+
+  it("sorts pinned notes above unpinned notes, then by newest update", async () => {
+    const oldPinned = note({
+      id: "old-pinned",
+      pinned: true,
+      updated_at: "2026-05-21T00:00:00.000Z"
+    });
+    const updatedPinned = note({
+      id: "old-pinned",
+      pinned: true,
+      updated_at: "2026-05-21T00:02:00.000Z"
+    });
+    const newestUnpinned = note({
+      id: "newest-unpinned",
+      pinned: false,
+      updated_at: "2026-05-21T00:03:00.000Z"
+    });
+    listNotesMock.mockResolvedValue([oldPinned, newestUnpinned]);
+    useNoteStore.setState({ notes: [oldPinned, newestUnpinned] });
+    updateNoteMock.mockResolvedValue(updatedPinned);
+    useNoteStore.getState().setActiveNote(oldPinned);
+    useNoteStore.getState().setDraftContent("updated pinned");
+
+    await useNoteStore.getState().saveDraft();
+
+    expect(useNoteStore.getState().notes.map((item) => item.id)).toEqual([
+      "old-pinned",
+      "newest-unpinned"
+    ]);
+  });
+});

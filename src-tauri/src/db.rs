@@ -338,6 +338,26 @@ mod tests {
     }
 
     #[test]
+    fn list_notes_respects_small_caller_limit() {
+        let database = Database::new_in_memory().unwrap();
+        for index in 0..5 {
+            database.create_note(format!("note {index}")).unwrap();
+        }
+
+        let notes = database.list_notes(Some(2)).unwrap();
+
+        assert_eq!(notes.len(), 2);
+    }
+
+    #[test]
+    fn update_missing_note_returns_not_found() {
+        let database = Database::new_in_memory().unwrap();
+        let result = database.update_note("missing".to_string(), "content".to_string());
+
+        assert!(matches!(result, Err(AppError::NoteNotFound)));
+    }
+
+    #[test]
     fn set_pinned_persists_pinned_state() {
         let database = Database::new_in_memory().unwrap();
         let note = database.create_note("pin me".to_string()).unwrap();
@@ -347,6 +367,14 @@ mod tests {
 
         assert!(pinned.pinned);
         assert!(fetched.pinned);
+    }
+
+    #[test]
+    fn set_pinned_missing_note_returns_not_found() {
+        let database = Database::new_in_memory().unwrap();
+        let result = database.set_pinned("missing".to_string(), true);
+
+        assert!(matches!(result, Err(AppError::NoteNotFound)));
     }
 
     #[test]
@@ -363,6 +391,13 @@ mod tests {
 
         assert!(database.get_note(empty.id).unwrap().is_none());
         assert!(database.get_note(non_empty.id).unwrap().is_some());
+    }
+
+    #[test]
+    fn delete_empty_note_is_harmless_for_missing_ids() {
+        let database = Database::new_in_memory().unwrap();
+
+        assert!(database.delete_empty_note("missing".to_string()).is_ok());
     }
 
     #[test]

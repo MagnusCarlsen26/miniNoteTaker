@@ -1,0 +1,94 @@
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useNoteStore } from "../store/noteStore";
+import { useAutosaveNote } from "./useAutosaveNote";
+
+function resetStore() {
+  useNoteStore.setState({
+    activeNote: null,
+    draftContent: "",
+    notes: [],
+    saveStatus: "idle",
+    saveError: null,
+    pendingSave: null
+  });
+}
+
+describe("useAutosaveNote", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    resetStore();
+  });
+
+  it("debounces writes by 300ms", () => {
+    const saveDraft = vi.fn().mockResolvedValue(null);
+    useNoteStore.setState({ saveDraft });
+    renderHook(() => useAutosaveNote());
+
+    act(() => {
+      useNoteStore.setState({ draftContent: "dirty", saveStatus: "dirty" });
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(299);
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushSave clears pending debounce and saves immediately", async () => {
+    const saveDraft = vi.fn().mockImplementation(async () => {
+      useNoteStore.setState({ saveStatus: "saved" });
+      return null;
+    });
+    useNoteStore.setState({ saveDraft });
+    const { result } = renderHook(() => useAutosaveNote());
+
+    act(() => {
+      useNoteStore.setState({ draftContent: "dirty", saveStatus: "dirty" });
+    });
+
+    await act(async () => {
+      await result.current.flushSave();
+    });
+
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries pending save before dirty save during flush", async () => {
+    const calls: string[] = [];
+    const retryPendingSave = vi.fn().mockImplementation(async () => {
+      calls.push("retry");
+      useNoteStore.setState({ pendingSave: null, saveStatus: "dirty" });
+      return null;
+    });
+    const saveDraft = vi.fn().mockImplementation(async () => {
+      calls.push("save");
+      return null;
+    });
+    useNoteStore.setState({
+      draftContent: "dirty",
+      pendingSave: { noteId: null, content: "pending" },
+      retryPendingSave,
+      saveDraft,
+      saveStatus: "dirty"
+    });
+    const { result } = renderHook(() => useAutosaveNote());
+
+    await act(async () => {
+      await result.current.flushSave();
+    });
+
+    expect(calls).toEqual(["retry", "save"]);
+  });
+});

@@ -9,6 +9,14 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().any(|arg| arg == "--show") {
+                let database = app.state::<db::Database>();
+                if let Err(error) = window::show_overlay(app, &database) {
+                    eprintln!("failed to show Quicknote from --show: {error}");
+                }
+            }
+        }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::app_ready,
@@ -35,6 +43,9 @@ pub fn run() {
             tray::init(app.handle())?;
             let database = app.state::<db::Database>();
             shortcuts::register_global_shortcuts(app.handle(), &database);
+            if std::env::args().any(|arg| arg == "--show") {
+                window::show_overlay(app.handle(), &database)?;
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

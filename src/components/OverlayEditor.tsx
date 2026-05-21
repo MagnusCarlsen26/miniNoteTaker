@@ -8,6 +8,7 @@ import {
   quitApp,
   registerShortcut
 } from "../lib/tauri";
+import { shouldUseDarkTheme } from "../lib/theme";
 import { useAppShortcuts } from "../hooks/useAppShortcuts";
 import { useAutosaveNote } from "../hooks/useAutosaveNote";
 import { useNoteStore } from "../store/noteStore";
@@ -38,15 +39,8 @@ function isThemePreference(value: string | null): value is ThemePreference {
 
 function applyTheme(theme: ThemePreference) {
   const root = document.documentElement;
-  if (theme === "dark") {
-    root.classList.add("dark");
-    return;
-  }
-  if (theme === "light") {
-    root.classList.remove("dark");
-    return;
-  }
-  root.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  root.classList.toggle("dark", shouldUseDarkTheme(theme, systemPrefersDark));
 }
 
 export function OverlayEditor() {
