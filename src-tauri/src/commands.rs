@@ -6,13 +6,28 @@ pub fn app_ready() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
-    crate::window::show_overlay(&app).map_err(|error| error.to_string())
+pub fn show_overlay(app: tauri::AppHandle, database: tauri::State<Database>) -> Result<(), String> {
+    crate::window::show_overlay(&app, &database).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 pub fn hide_overlay(app: tauri::AppHandle) -> Result<(), String> {
     crate::window::hide_overlay(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn center_overlay(app: tauri::AppHandle) -> Result<(), String> {
+    crate::window::center_overlay(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn save_window_size(
+    database: tauri::State<Database>,
+    width: u32,
+    height: u32,
+) -> Result<(), AppError> {
+    database.set_setting("window.width".to_string(), width.to_string())?;
+    database.set_setting("window.height".to_string(), height.to_string())
 }
 
 #[tauri::command]

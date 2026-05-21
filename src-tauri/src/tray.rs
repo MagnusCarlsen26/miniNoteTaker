@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Wry,
+    AppHandle, Manager, Wry,
 };
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
@@ -15,7 +15,8 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
-                if let Err(error) = crate::window::show_overlay(app) {
+                let database = app.state::<crate::db::Database>();
+                if let Err(error) = crate::window::show_overlay(app, &database) {
                     eprintln!("failed to show Quicknote: {error}");
                 }
             }
@@ -29,7 +30,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                if let Err(error) = crate::window::show_overlay(tray.app_handle()) {
+                let app = tray.app_handle();
+                let database = app.state::<crate::db::Database>();
+                if let Err(error) = crate::window::show_overlay(app, &database) {
                     eprintln!("failed to show Quicknote: {error}");
                 }
             }

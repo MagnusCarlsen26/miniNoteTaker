@@ -9,6 +9,14 @@ export function hideOverlay(): Promise<void> {
   return invoke<void>("hide_overlay");
 }
 
+export function centerOverlay(): Promise<void> {
+  return invoke<void>("center_overlay");
+}
+
+export function saveWindowSize(width: number, height: number): Promise<void> {
+  return invoke<void>("save_window_size", { width, height });
+}
+
 export function appReady(): Promise<string> {
   return invoke<string>("app_ready");
 }

@@ -14,6 +14,8 @@ pub fn run() {
             commands::app_ready,
             commands::show_overlay,
             commands::hide_overlay,
+            commands::center_overlay,
+            commands::save_window_size,
             commands::create_note,
             commands::update_note,
             commands::list_notes,
