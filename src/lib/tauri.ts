@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Note } from "../types/note";
+import type { Folder, Note } from "../types/note";
 
 export function showOverlay(): Promise<void> {
   return invoke<void>("show_overlay");
@@ -59,6 +59,26 @@ export function setPinned(id: string, pinned: boolean): Promise<Note> {
 
 export function deleteEmptyNote(id: string): Promise<void> {
   return invoke<void>("delete_empty_note", { id });
+}
+
+export function createFolder(name: string): Promise<Folder> {
+  return invoke<Folder>("create_folder", { name });
+}
+
+export function listFolders(): Promise<Folder[]> {
+  return invoke<Folder[]>("list_folders");
+}
+
+export function deleteFolder(id: string): Promise<void> {
+  return invoke<void>("delete_folder", { id });
+}
+
+export function listNotesByFolder(folderId: string, limit?: number): Promise<Note[]> {
+  return invoke<Note[]>("list_notes_by_folder", { folderId, limit });
+}
+
+export function setNoteFolders(noteId: string, folderIds: string[]): Promise<Note> {
+  return invoke<Note>("set_note_folders", { noteId, folderIds });
 }
 
 export function getSetting(key: string): Promise<string | null> {

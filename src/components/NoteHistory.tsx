@@ -7,6 +7,8 @@ import type { Note } from "../types/note";
 type NoteHistoryProps = {
   selectedNoteId: string | null;
   onSelectNote: (note: Note) => void;
+  notesOverride?: Note[];
+  title?: string;
 };
 
 function previewContent(note: Note) {
@@ -40,8 +42,9 @@ function formatRelativeTime(updatedAt: string) {
   return `${Math.max(months, 1)} months`;
 }
 
-export function NoteHistory({ selectedNoteId, onSelectNote }: NoteHistoryProps) {
-  const notes = useNoteStore((state) => state.notes);
+export function NoteHistory({ selectedNoteId, onSelectNote, notesOverride, title = "Recent" }: NoteHistoryProps) {
+  const storeNotes = useNoteStore((state) => state.notes);
+  const notes = notesOverride ?? storeNotes;
   const initialIndex = useMemo(() => {
     if (!selectedNoteId) {
       return 0;
@@ -102,7 +105,7 @@ export function NoteHistory({ selectedNoteId, onSelectNote }: NoteHistoryProps) 
       }}
     >
       <div className="mb-2 text-xs font-medium uppercase text-[#657064] dark:text-[#aeb9aa]">
-        Recent
+        {title}
       </div>
       <div className="grid gap-1">
         {visibleNotes.map((note, index) => (
@@ -121,6 +124,11 @@ export function NoteHistory({ selectedNoteId, onSelectNote }: NoteHistoryProps) 
                 <Pin size={13} className="shrink-0 text-[#2f6b43] dark:text-[#8ed081]" aria-hidden="true" />
               ) : null}
               <span className="truncate">{previewContent(note)}</span>
+              {note.folders.length > 0 ? (
+                <span className="shrink-0 rounded border border-[#dce5d8] px-1 text-[10px] text-[#657064] dark:border-[#2c3628] dark:text-[#aeb9aa]">
+                  {note.folders.length === 1 ? note.folders[0].name : note.folders.length}
+                </span>
+              ) : null}
             </span>
             <span className="whitespace-nowrap text-xs text-[#657064] dark:text-[#aeb9aa]">
               {formatRelativeTime(note.updated_at)}

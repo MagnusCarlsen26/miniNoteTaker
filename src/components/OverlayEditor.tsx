@@ -1,8 +1,8 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import dayjs from "dayjs";
-import { Home, NotebookText, PenSquare, Pin } from "lucide-react";
-import { ChangeEvent, MouseEvent, useCallback, useEffect, useMemo, useRef } from "react";
+import { Check, Folder, Home, NotebookText, PenSquare, Pin, Plus, Trash2 } from "lucide-react";
+import { ChangeEvent, KeyboardEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getRegisteredShortcut,
   getSetting,
@@ -51,6 +51,11 @@ function previewContent(content: string) {
   return content.replace(/\s+/g, " ").trim() || "Empty note";
 }
 
+function compactFolderName(name: string) {
+  const trimmed = name.trim();
+  return trimmed.length > 6 ? `${trimmed.slice(0, 6)}...` : trimmed;
+}
+
 const EDITOR_WINDOW_SIZE = new LogicalSize(600, 400);
 const DASHBOARD_WINDOW_SIZE = new LogicalSize(920, 560);
 
@@ -59,11 +64,19 @@ export function OverlayEditor() {
   const activeNote = useNoteStore((state) => state.activeNote);
   const draftContent = useNoteStore((state) => state.draftContent);
   const notes = useNoteStore((state) => state.notes);
+  const folders = useNoteStore((state) => state.folders);
+  const selectedFolderId = useNoteStore((state) => state.selectedFolderId);
+  const folderError = useNoteStore((state) => state.folderError);
   const saveStatus = useNoteStore((state) => state.saveStatus);
   const saveError = useNoteStore((state) => state.saveError);
   const pendingSave = useNoteStore((state) => state.pendingSave);
   const setDraftContent = useNoteStore((state) => state.setDraftContent);
   const loadNotes = useNoteStore((state) => state.loadNotes);
+  const loadFolders = useNoteStore((state) => state.loadFolders);
+  const createFolder = useNoteStore((state) => state.createFolder);
+  const deleteFolder = useNoteStore((state) => state.deleteFolder);
+  const loadNotesByFolder = useNoteStore((state) => state.loadNotesByFolder);
+  const toggleActiveNoteFolder = useNoteStore((state) => state.toggleActiveNoteFolder);
   const resetDraft = useNoteStore((state) => state.resetDraft);
   const setOverlayVisible = useUiStore((state) => state.setOverlayVisible);
   const setLastCursorPosition = useUiStore((state) => state.setLastCursorPosition);
@@ -80,6 +93,10 @@ export function OverlayEditor() {
   const setSelectedHistoryNoteId = useUiStore((state) => state.setSelectedHistoryNoteId);
   const { flushSave } = useAutosaveNote({ debounceMs: 300 });
   const registeredShortcutRef = useRef("Super+Space");
+  const [folderPanelOpen, setFolderPanelOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [dashboardFolderName, setDashboardFolderName] = useState("");
+  const [confirmDeleteFolderId, setConfirmDeleteFolderId] = useState<string | null>(null);
 
   const focusEditor = useCallback(() => {
     const textarea = textareaRef.current;
@@ -125,7 +142,8 @@ export function OverlayEditor() {
         resetDraft();
       }
     });
-  }, [loadNotes, resetDraft]);
+    void loadFolders();
+  }, [loadFolders, loadNotes, resetDraft]);
 
   useEffect(() => {
     let cleanupMediaListener: (() => void) | undefined;
@@ -214,6 +232,12 @@ export function OverlayEditor() {
   }, [saveError, setToastMessage]);
 
   useEffect(() => {
+    if (folderError) {
+      setToastMessage(folderError);
+    }
+  }, [folderError, setToastMessage]);
+
+  useEffect(() => {
     setActiveNoteId(activeNote?.id ?? null);
   }, [activeNote?.id, setActiveNoteId]);
 
@@ -227,6 +251,12 @@ export function OverlayEditor() {
       setSelectedHistoryNoteId(notes[0]?.id ?? null);
     }
   }, [notes, selectedHistoryNoteId, setSelectedHistoryNoteId]);
+
+  useEffect(() => {
+    if (selectedSidebarItem === "folders" && selectedFolderId) {
+      void loadNotesByFolder(selectedFolderId, 1000);
+    }
+  }, [loadNotesByFolder, selectedFolderId, selectedSidebarItem]);
 
   const handleCursorChange = () => {
     setLastCursorPosition(textareaRef.current?.selectionStart ?? 0);
@@ -261,7 +291,29 @@ export function OverlayEditor() {
     action();
   };
 
+  const createAndAssignFolder = useCallback(async () => {
+    const folder = await createFolder(newFolderName);
+    if (!folder) {
+      return;
+    }
+    setNewFolderName("");
+    await toggleActiveNoteFolder(folder.id);
+    window.requestAnimationFrame(focusEditor);
+  }, [createFolder, focusEditor, newFolderName, toggleActiveNoteFolder]);
+
+  const createDashboardFolder = useCallback(async () => {
+    const folder = await createFolder(dashboardFolderName);
+    if (!folder) {
+      return;
+    }
+    setDashboardFolderName("");
+    await loadNotesByFolder(folder.id, 1000);
+  }, [createFolder, dashboardFolderName, loadNotesByFolder]);
+
   const selectedHistoryNote = notes.find((note) => note.id === selectedHistoryNoteId) ?? null;
+  const activeFolders = activeNote?.folders ?? [];
+  const activeFolderIds = new Set(activeFolders.map((folder) => folder.id));
+  const selectedFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null;
 
   const openNoteInEditor = useCallback(() => {
     if (!selectedHistoryNote) {
@@ -316,7 +368,70 @@ export function OverlayEditor() {
             </div>
           ) : null}
 
-          <footer className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-[#dce5d8] pt-2 dark:border-[#2c3628]">
+          <div className="relative shrink-0">
+            <div className="flex min-h-8 items-center gap-1 overflow-x-auto pb-1">
+              {folders.map((folder) => {
+                const selected = activeFolderIds.has(folder.id);
+                return (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    aria-pressed={selected}
+                    title={folder.name}
+                    onMouseDown={(event) => handleMouseDownAction(event, () => void toggleActiveNoteFolder(folder.id))}
+                    onClick={(event) => event.preventDefault()}
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-[#d2ddce] bg-[#fbfdfb] px-2 text-xs font-medium text-[#536150] transition hover:border-[#9fb794] hover:bg-[#eef4ec] aria-pressed:border-[#2f6b43] aria-pressed:bg-[#dfeede] aria-pressed:text-[#255736] dark:border-[#2c3628] dark:bg-[#141b12] dark:text-[#b8c7b4] dark:hover:border-[#4e6846] dark:hover:bg-[#202a1d] dark:aria-pressed:border-[#76b774] dark:aria-pressed:bg-[#24351f] dark:aria-pressed:text-[#b9e8b1]"
+                  >
+                    <Folder size={12} aria-hidden="true" />
+                    <span className="max-w-14">{compactFolderName(folder.name)}</span>
+                    {selected ? <Check size={12} aria-hidden="true" /> : null}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                aria-label="Create folder"
+                onMouseDown={(event) => handleMouseDownAction(event, () => setFolderPanelOpen((open) => !open))}
+                onClick={(event) => event.preventDefault()}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#dce5d8] text-[#2f6b43] hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
+              >
+                <Plus size={14} aria-hidden="true" />
+              </button>
+            </div>
+            {folderPanelOpen ? (
+              <div className="absolute bottom-9 left-0 z-10 w-60 rounded-md border border-[#dce5d8] bg-[#fbfdfb] p-2 shadow-lg dark:border-[#2c3628] dark:bg-[#141b12]">
+                <div className="flex items-center gap-1">
+                  <input
+                    value={newFolderName}
+                    onChange={(event) => setNewFolderName(event.target.value)}
+                    onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void createAndAssignFolder();
+                      }
+                      if (event.key === "Escape") {
+                        setFolderPanelOpen(false);
+                        window.requestAnimationFrame(focusEditor);
+                      }
+                    }}
+                    placeholder="New folder"
+                    className="min-w-0 flex-1 rounded border border-[#dce5d8] bg-transparent px-2 py-1 text-sm outline-none dark:border-[#2c3628]"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Create folder"
+                    onMouseDown={(event) => handleMouseDownAction(event, () => void createAndAssignFolder())}
+                    onClick={(event) => event.preventDefault()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white"
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#dce5d8] pt-2 dark:border-[#2c3628]">
             <ShortcutHint keys="Esc" label="Close" />
             <ShortcutHint keys="Ctrl N" label="New" />
             <ShortcutHint keys="Ctrl P" label="Pin" />
@@ -372,12 +487,30 @@ export function OverlayEditor() {
             <button
               type="button"
               aria-pressed={selectedSidebarItem === "recent"}
-              onMouseDown={(event) => handleMouseDownAction(event, () => setSelectedSidebarItem("recent"))}
-              onClick={() => setSelectedSidebarItem("recent")}
+              onMouseDown={(event) =>
+                handleMouseDownAction(event, () => {
+                  setSelectedSidebarItem("recent");
+                  void loadNotes(1000);
+                })
+              }
+              onClick={() => {
+                setSelectedSidebarItem("recent");
+                void loadNotes(1000);
+              }}
               className="flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[#253022] transition hover:bg-[#e5eee1] aria-pressed:bg-[#dce8d8] dark:text-[#e2eadf] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#263220]"
             >
               <NotebookText size={16} aria-hidden="true" />
               Recent
+            </button>
+            <button
+              type="button"
+              aria-pressed={selectedSidebarItem === "folders"}
+              onMouseDown={(event) => handleMouseDownAction(event, () => setSelectedSidebarItem("folders"))}
+              onClick={() => setSelectedSidebarItem("folders")}
+              className="mt-1 flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[#253022] transition hover:bg-[#e5eee1] aria-pressed:bg-[#dce8d8] dark:text-[#e2eadf] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#263220]"
+            >
+              <Folder size={16} aria-hidden="true" />
+              Folders
             </button>
           </aside>
 
@@ -424,6 +557,114 @@ export function OverlayEditor() {
                   No recent notes yet
                 </div>
               )
+            ) : null}
+            {selectedSidebarItem === "folders" ? (
+              <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[260px_1fr]">
+                <div className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-3 dark:border-[#2c3628] dark:bg-[#141b12]">
+                  <div className="mb-2 text-xs font-medium uppercase text-[#657064] dark:text-[#aeb9aa]">
+                    Folders
+                  </div>
+                  <div className="grid gap-1">
+                    {folders.map((folder) => {
+                      const confirming = confirmDeleteFolderId === folder.id;
+                      return (
+                        <div
+                          key={folder.id}
+                          className="grid h-9 grid-cols-[1fr_auto] items-center gap-1 rounded-md px-2 text-sm hover:bg-[#eef4ec] dark:hover:bg-[#202a1d]"
+                        >
+                          <button
+                            type="button"
+                            aria-pressed={selectedFolderId === folder.id}
+                            onMouseDown={(event) =>
+                              handleMouseDownAction(event, () => void loadNotesByFolder(folder.id, 1000))
+                            }
+                            onClick={() => void loadNotesByFolder(folder.id, 1000)}
+                            className="min-w-0 text-left"
+                          >
+                            <span className="block truncate font-medium">{folder.name}</span>
+                            <span className="text-xs text-[#657064] dark:text-[#aeb9aa]">{folder.note_count}</span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Delete folder"
+                            onMouseDown={(event) =>
+                              handleMouseDownAction(event, () => {
+                                if (confirming) {
+                                  void deleteFolder(folder.id).then(() => {
+                                    setConfirmDeleteFolderId(null);
+                                  });
+                                } else {
+                                  setConfirmDeleteFolderId(folder.id);
+                                }
+                              })
+                            }
+                            onClick={() => {
+                              if (confirming) {
+                                void deleteFolder(folder.id).then(() => setConfirmDeleteFolderId(null));
+                              } else {
+                                setConfirmDeleteFolderId(folder.id);
+                              }
+                            }}
+                            className="inline-flex h-7 items-center justify-center rounded px-1.5 text-xs text-[#8a3d2b] hover:bg-[#fae9e4] dark:text-[#f0a394] dark:hover:bg-[#2a1b18]"
+                          >
+                            {confirming ? (folder.note_count > 0 ? "Delete notes?" : "Delete?") : <Trash2 size={14} />}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex items-center gap-1 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
+                    <input
+                      value={dashboardFolderName}
+                      onChange={(event) => setDashboardFolderName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void createDashboardFolder();
+                        }
+                      }}
+                      placeholder="New folder"
+                      className="min-w-0 flex-1 rounded border border-[#dce5d8] bg-transparent px-2 py-1.5 text-sm outline-none dark:border-[#2c3628]"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Create folder"
+                      onMouseDown={(event) => handleMouseDownAction(event, () => void createDashboardFolder())}
+                      onClick={() => void createDashboardFolder()}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white"
+                    >
+                      <Plus size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+                <article className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-4 dark:border-[#2c3628] dark:bg-[#141b12]">
+                  {selectedFolder ? (
+                    notes.length > 0 ? (
+                      <div className="grid min-h-0 gap-4 lg:grid-cols-[260px_1fr]">
+                        <NoteHistory
+                          selectedNoteId={selectedHistoryNoteId}
+                          onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                          notesOverride={notes}
+                          title={selectedFolder.name}
+                        />
+                        {selectedHistoryNote ? (
+                          <div className="min-w-0 whitespace-pre-wrap text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
+                            {selectedHistoryNote.content}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sm text-[#657064] dark:text-[#aeb9aa]">
+                        No notes
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-[#657064] dark:text-[#aeb9aa]">
+                      No folders
+                    </div>
+                  )}
+                </article>
+              </div>
             ) : null}
           </div>
         </section>

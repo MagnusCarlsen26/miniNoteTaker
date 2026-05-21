@@ -34,6 +34,11 @@ pub fn run() {
             commands::get_note,
             commands::set_pinned,
             commands::delete_empty_note,
+            commands::create_folder,
+            commands::list_folders,
+            commands::delete_folder,
+            commands::list_notes_by_folder,
+            commands::set_note_folders,
             commands::get_setting,
             commands::set_setting
         ])

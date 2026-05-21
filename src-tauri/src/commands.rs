@@ -1,4 +1,4 @@
-use crate::db::{AppError, Database, NoteDto};
+use crate::db::{AppError, Database, FolderDto, NoteDto};
 
 #[tauri::command]
 pub fn app_ready() -> Result<String, String> {
@@ -93,6 +93,42 @@ pub fn set_pinned(
 #[tauri::command]
 pub fn delete_empty_note(database: tauri::State<Database>, id: String) -> Result<(), AppError> {
     database.delete_empty_note(id)
+}
+
+#[tauri::command]
+pub fn create_folder(
+    database: tauri::State<Database>,
+    name: String,
+) -> Result<FolderDto, AppError> {
+    database.create_folder(name)
+}
+
+#[tauri::command]
+pub fn list_folders(database: tauri::State<Database>) -> Result<Vec<FolderDto>, AppError> {
+    database.list_folders()
+}
+
+#[tauri::command]
+pub fn delete_folder(database: tauri::State<Database>, id: String) -> Result<(), AppError> {
+    database.delete_folder(id)
+}
+
+#[tauri::command]
+pub fn list_notes_by_folder(
+    database: tauri::State<Database>,
+    folder_id: String,
+    limit: Option<u32>,
+) -> Result<Vec<NoteDto>, AppError> {
+    database.list_notes_by_folder(folder_id, limit)
+}
+
+#[tauri::command]
+pub fn set_note_folders(
+    database: tauri::State<Database>,
+    note_id: String,
+    folder_ids: Vec<String>,
+) -> Result<NoteDto, AppError> {
+    database.set_note_folders(note_id, folder_ids)
 }
 
 #[tauri::command]

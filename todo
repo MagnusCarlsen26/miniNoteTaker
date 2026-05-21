@@ -1,64 +1,44 @@
 # Immediate Next
 - [ ] Folders concept
-- [ ] Ability to edit delete old notes.
+- [ ] Ability to edit delete old notes. -> Soft Delete. Create a trash section in dashboard and delete from their again to delete if finally
 - [ ] Increase ui size when seeing dashboard
 
 # Next
+- [ ] Deadline to comeplete/remind.
+- [ ] Pasting Image/ PDF.
+- [ ] First line is title. Just indicate that by long line in ui.
+- [ ] Searching and Sorting and Filtering
+    - [ ] Sorting based on timestamp
+    - [ ] Filtering based on folder, timerange and search
+    - [ ]
 - [ ] My account
     - [ ] Theme selector
-    - [ ] Signup/Login
+    - [ ] Disable Auto Save
+- [ ] Sound feedback on save
+- [ ] Hyperlink detection
 
 # Next Next
-- [ ] Vim Bindings
+- [ ] Use and Archive notes
 - [ ] Font size increase/decrease everywhere
 - [ ] Set Default size
+- [ ] Workspace
+- [ ] Import/Export Notes
+- [ ] Tiny memory footprint
 
-# High Level Idea
+# Next Next Next
+- [ ] Logo
+- [ ] Voice-to-note capture
+- [ ] Cloud Encrypted Sync
 
-## P0
+# Next Next Next Next
+- [ ] AI
+
+# Completed
 - [x] Global hotkey launch
 - [x] Instant open overlay
-- [ ] Auto save notes
+- [x] Auto save notes
 - [x] Escape to close + same hotkey press again to toggle
 - [x] Recent notes history
 - [x] Pin important notes
 - [x] Offline-first storage
-- [ ] Light/Dark mode support
 - [x] Timestamp every note
-
-# P1
-- [ ] Keyboard-only navigation
-- [ ] Fuzzy note search
-- [ ] Markdown support light
-- [ ] use and archive daily notes
-- [ ] Vim keybindings optional
-- [ ] Archive old notes
-- [ ] Voice-to-note capture
-
-# P2
-- [ ] Local encrypted notes
-- [ ] Startup with system
-- [ ] Tag notes quickly
-- [ ] Quick export notes
-- [ ] Undo accidental deletion
-- [ ] Instant startup caching
-- [ ] Note color highlighting
-- [ ] Hyperlink detection
-- [ ] Pasting Image/ PDF
-- [ ] Deadline to complete 
-- [ ] Auto-title generation
-
-## P3
-- [ ] Cross-device sync optional
-- [ ] Tiny memory footprint
-- [ ] Command palette actions
-- [ ] OCR screenshot capture
-- [ ] AI semantic search
-- [ ] Keyboard shortcut customization
-- [ ] Favorite snippets storage
-- [ ] Session-based workspaces
-- [ ] Crash-safe persistence
-- [ ] Import existing notes
-- [ ] Sound feedback optional
-
-

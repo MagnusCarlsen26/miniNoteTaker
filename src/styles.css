@@ -33,6 +33,7 @@ body {
 }
 
 button {
+  cursor: pointer;
   font: inherit;
 }
 
