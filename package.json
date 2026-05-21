@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "check": "npm run build && npm test && cargo test --manifest-path src-tauri/Cargo.toml",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev:show": "tauri dev -- -- --show"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",

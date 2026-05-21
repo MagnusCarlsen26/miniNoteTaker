@@ -1,0 +1,1 @@
+1. Shortcut is not working in linux. Not sure about windows and linux.

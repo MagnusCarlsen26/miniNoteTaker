@@ -1,0 +1,64 @@
+# Immediate Next
+- [ ] Folders concept
+- [ ] Ability to edit delete old notes.
+- [ ] Increase ui size when seeing dashboard
+
+# Next
+- [ ] My account
+    - [ ] Theme selector
+    - [ ] Signup/Login
+
+# Next Next
+- [ ] Vim Bindings
+- [ ] Font size increase/decrease everywhere
+- [ ] Set Default size
+
+# High Level Idea
+
+## P0
+- [x] Global hotkey launch
+- [x] Instant open overlay
+- [ ] Auto save notes
+- [x] Escape to close + same hotkey press again to toggle
+- [x] Recent notes history
+- [x] Pin important notes
+- [x] Offline-first storage
+- [ ] Light/Dark mode support
+- [x] Timestamp every note
+
+# P1
+- [ ] Keyboard-only navigation
+- [ ] Fuzzy note search
+- [ ] Markdown support light
+- [ ] use and archive daily notes
+- [ ] Vim keybindings optional
+- [ ] Archive old notes
+- [ ] Voice-to-note capture
+
+# P2
+- [ ] Local encrypted notes
+- [ ] Startup with system
+- [ ] Tag notes quickly
+- [ ] Quick export notes
+- [ ] Undo accidental deletion
+- [ ] Instant startup caching
+- [ ] Note color highlighting
+- [ ] Hyperlink detection
+- [ ] Pasting Image/ PDF
+- [ ] Deadline to complete 
+- [ ] Auto-title generation
+
+## P3
+- [ ] Cross-device sync optional
+- [ ] Tiny memory footprint
+- [ ] Command palette actions
+- [ ] OCR screenshot capture
+- [ ] AI semantic search
+- [ ] Keyboard shortcut customization
+- [ ] Favorite snippets storage
+- [ ] Session-based workspaces
+- [ ] Crash-safe persistence
+- [ ] Import existing notes
+- [ ] Sound feedback optional
+
+

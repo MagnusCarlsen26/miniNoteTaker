@@ -51,8 +51,8 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                if let Err(error) = window.hide() {
-                    eprintln!("failed to hide window on close: {error}");
+                if let Err(error) = window::request_overlay_close(window.app_handle()) {
+                    eprintln!("failed to request overlay close: {error}");
                 }
             }
         })

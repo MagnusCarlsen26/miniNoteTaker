@@ -2,7 +2,7 @@ use crate::db::{AppError, Database};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-pub const DEFAULT_SHORTCUT: &str = "Ctrl+Space";
+pub const DEFAULT_SHORTCUT: &str = "Super+Space";
 const SHORTCUT_SETTING: &str = "shortcut.primary";
 const SHORTCUT_FAILURE_SETTING: &str = "shortcut.failure";
 
@@ -35,8 +35,8 @@ pub fn register_shortcut(
             }
 
             let database = app.state::<Database>();
-            if let Err(error) = crate::window::show_overlay(app, &database) {
-                eprintln!("failed to show Quicknote from shortcut {shortcut}: {error}");
+            if let Err(error) = crate::window::toggle_overlay(app, &database) {
+                eprintln!("failed to toggle Quicknote from shortcut {shortcut}: {error}");
             }
         })
         .map_err(|error| AppError::Shortcut(error.to_string()))?;

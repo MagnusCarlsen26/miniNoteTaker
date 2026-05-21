@@ -23,6 +23,12 @@ Use TypeScript, React function components, and hooks. Name components in `Pascal
 
 Follow the existing Rust module style: small modules in `src-tauri/src`, snake_case file names, and explicit error handling. Run `npm run build` before submitting TypeScript changes; use `cargo fmt --manifest-path src-tauri/Cargo.toml` for Rust formatting when Rust files change.
 
+# Styling UI
+
+We have very limited real estate. This desktop app will not occupy entire area of laptop. Probably only 1/5th So be space consicous save space wherever possible
+
+Use on mouseDown everywhere
+
 ## Testing Guidelines
 
 Frontend tests use Vitest with Testing Library and colocated test files. Add or update tests for store behavior, hooks, and user-visible state changes. Prefer names that describe behavior, such as `useAutosaveNote.test.tsx` or `theme.test.ts`.

@@ -1,25 +1,18 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { RefObject } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { hideOverlay, saveWindowSize } from "../lib/tauri";
 import { useNoteStore } from "../store/noteStore";
 import { useUiStore } from "../store/uiStore";
 import type { Note } from "../types/note";
 
 type UseAppShortcutsOptions = {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  closeOverlay: () => Promise<void>;
   flushSave: () => Promise<Note | null>;
 };
 
-async function persistCurrentWindowSize() {
-  const size = await getCurrentWindow().outerSize();
-  await saveWindowSize(size.width, size.height);
-}
-
-export function useAppShortcuts({ textareaRef, flushSave }: UseAppShortcutsOptions) {
+export function useAppShortcuts({ textareaRef, closeOverlay, flushSave }: UseAppShortcutsOptions) {
   const resetDraft = useNoteStore((state) => state.resetDraft);
   const togglePinned = useNoteStore((state) => state.togglePinned);
-  const setOverlayVisible = useUiStore((state) => state.setOverlayVisible);
   const setLastCursorPosition = useUiStore((state) => state.setLastCursorPosition);
 
   useHotkeys(
@@ -27,20 +20,10 @@ export function useAppShortcuts({ textareaRef, flushSave }: UseAppShortcutsOptio
     (event) => {
       event.preventDefault();
       setLastCursorPosition(textareaRef.current?.selectionStart ?? 0);
-
-      void (async () => {
-        await flushSave();
-        try {
-          await persistCurrentWindowSize();
-        } catch {
-          // Window size persistence should never block closing the overlay.
-        }
-        await hideOverlay();
-        setOverlayVisible(false);
-      })();
+      void closeOverlay();
     },
     { enableOnFormTags: true },
-    [flushSave, setLastCursorPosition, setOverlayVisible, textareaRef]
+    [closeOverlay, setLastCursorPosition, textareaRef]
   );
 
   useHotkeys(
