@@ -18,4 +18,3 @@ pub fn hide_overlay(app: &AppHandle) -> tauri::Result<()> {
 
     Ok(())
 }
-

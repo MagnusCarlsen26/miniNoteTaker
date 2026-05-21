@@ -8,3 +8,4 @@ export type Note = {
 
 export type ThemePreference = "system" | "light" | "dark";
 
+export type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";

@@ -1,11 +1,14 @@
 import { Eye, EyeOff, MonitorCheck } from "lucide-react";
 import { useOverlayCommands } from "../hooks/useOverlayCommands";
+import { useNoteStore } from "../store/noteStore";
 import { useUiStore } from "../store/uiStore";
 
 export function ShellStatus() {
   const { show, hide } = useOverlayCommands();
   const isOverlayVisible = useUiStore((state) => state.isOverlayVisible);
   const lastCommandResult = useUiStore((state) => state.lastCommandResult);
+  const saveStatus = useNoteStore((state) => state.saveStatus);
+  const saveError = useNoteStore((state) => state.saveError);
   const isReady = lastCommandResult === "Shell ready";
 
   return (
@@ -57,9 +60,17 @@ export function ShellStatus() {
           </div>
 
           <p className="text-sm text-[#536150] dark:text-[#b8c7b4]">
-            Persistence, note history, autosave, and hotkey capture are not
-            implemented yet.
+            Persistence APIs and autosave state are available for the editor.
           </p>
+          {saveError ? (
+            <p className="text-sm font-medium text-[#9b2c2c] dark:text-[#ffb4a8]">
+              {saveError}
+            </p>
+          ) : (
+            <p className="text-sm text-[#536150] dark:text-[#b8c7b4]">
+              Save status: {saveStatus}
+            </p>
+          )}
         </div>
 
         <div className="min-h-6 text-xs text-[#536150] dark:text-[#b8c7b4]">
@@ -69,4 +80,3 @@ export function ShellStatus() {
     </main>
   );
 }
-
