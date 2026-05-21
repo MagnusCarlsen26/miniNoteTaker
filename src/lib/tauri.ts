@@ -21,6 +21,22 @@ export function appReady(): Promise<string> {
   return invoke<string>("app_ready");
 }
 
+export function registerShortcut(accelerator: string): Promise<void> {
+  return invoke<void>("register_shortcut", { accelerator });
+}
+
+export function getRegisteredShortcut(): Promise<string> {
+  return invoke<string>("get_registered_shortcut");
+}
+
+export function getShortcutFailure(): Promise<string | null> {
+  return invoke<string | null>("get_shortcut_failure");
+}
+
+export function quitApp(): Promise<void> {
+  return invoke<void>("quit_app");
+}
+
 export function createNote(content: string): Promise<Note> {
   return invoke<Note>("create_note", { content });
 }

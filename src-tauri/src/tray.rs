@@ -1,11 +1,11 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Wry,
+    AppHandle, Emitter, Manager, Wry,
 };
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::<Wry>::with_id(app, "show", "Show Quicknote", true, None::<&str>)?;
+    let show = MenuItem::<Wry>::with_id(app, "show", "Open Quicknote", true, None::<&str>)?;
     let quit = MenuItem::<Wry>::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
@@ -20,7 +20,12 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
                     eprintln!("failed to show Quicknote: {error}");
                 }
             }
-            "quit" => app.exit(0),
+            "quit" => {
+                if let Err(error) = app.emit("app:quit-requested", ()) {
+                    eprintln!("failed to request Quicknote quit: {error}");
+                    app.exit(0);
+                }
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

@@ -1,7 +1,13 @@
 import { listen } from "@tauri-apps/api/event";
 import dayjs from "dayjs";
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef } from "react";
-import { getSetting } from "../lib/tauri";
+import {
+  getRegisteredShortcut,
+  getSetting,
+  getShortcutFailure,
+  quitApp,
+  registerShortcut
+} from "../lib/tauri";
 import { useAppShortcuts } from "../hooks/useAppShortcuts";
 import { useAutosaveNote } from "../hooks/useAutosaveNote";
 import { useNoteStore } from "../store/noteStore";
@@ -59,6 +65,9 @@ export function OverlayEditor() {
   const setLastCursorPosition = useUiStore((state) => state.setLastCursorPosition);
   const setTheme = useUiStore((state) => state.setTheme);
   const setToastMessage = useUiStore((state) => state.setToastMessage);
+  const shortcutFailure = useUiStore((state) => state.shortcutFailure);
+  const setShortcutFailure = useUiStore((state) => state.setShortcutFailure);
+  const setActiveNoteId = useUiStore((state) => state.setActiveNoteId);
   const { flushSave } = useAutosaveNote({ debounceMs: 300 });
 
   useAppShortcuts({ textareaRef, flushSave });
@@ -111,19 +120,45 @@ export function OverlayEditor() {
   }, [setTheme]);
 
   useEffect(() => {
-    const unlistenPromise = listen("overlay:shown", () => {
+    const unlistenPromise = listen("overlay:shown", async () => {
       setOverlayVisible(true);
+      try {
+        setShortcutFailure(await getShortcutFailure());
+      } catch {
+        setShortcutFailure(null);
+      }
       window.requestAnimationFrame(focusEditor);
     });
 
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [focusEditor, setOverlayVisible]);
+  }, [focusEditor, setOverlayVisible, setShortcutFailure]);
+
+  useEffect(() => {
+    void getRegisteredShortcut().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const unlistenPromise = listen("app:quit-requested", () => {
+      void (async () => {
+        await flushSave();
+        await quitApp();
+      })();
+    });
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [flushSave]);
 
   useEffect(() => {
     setToastMessage(saveError);
   }, [saveError, setToastMessage]);
+
+  useEffect(() => {
+    setActiveNoteId(activeNote?.id ?? null);
+  }, [activeNote?.id, setActiveNoteId]);
 
   const handleCursorChange = () => {
     setLastCursorPosition(textareaRef.current?.selectionStart ?? 0);
@@ -135,6 +170,20 @@ export function OverlayEditor() {
   };
 
   const showHistory = draftContent.trim().length === 0 && notes.length > 0;
+
+  const handleShortcutFallback = (accelerator: string) => {
+    void (async () => {
+      try {
+        await registerShortcut(accelerator);
+        setShortcutFailure(null);
+        setToastMessage(`Shortcut set to ${accelerator}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setShortcutFailure(message);
+        setToastMessage("Shortcut registration failed");
+      }
+    })();
+  };
 
   return (
     <main className="relative flex h-full min-h-0 flex-col bg-[#f7faf6] text-[#172116] dark:bg-[#11170f] dark:text-[#ecf3ea]">
@@ -158,6 +207,24 @@ export function OverlayEditor() {
           onSelect={handleCursorChange}
           className="min-h-0 flex-1 resize-none border-0 bg-transparent text-[15px] leading-6 text-[#172116] outline-none placeholder:text-[#8a9587] dark:text-[#ecf3ea] dark:placeholder:text-[#788475]"
         />
+
+        {shortcutFailure ? (
+          <div className="rounded-md border border-[#d6c7a7] bg-[#fff8e8] px-3 py-2 text-xs text-[#60451d] dark:border-[#5c4a2e] dark:bg-[#211b12] dark:text-[#f0d8a8]">
+            <div className="mb-2 font-medium">Ctrl+Space is unavailable</div>
+            <div className="flex flex-wrap gap-2">
+              {["Ctrl+Shift+Space", "Ctrl+Alt+Space"].map((accelerator) => (
+                <button
+                  key={accelerator}
+                  type="button"
+                  onClick={() => handleShortcutFallback(accelerator)}
+                  className="rounded border border-[#c4ad7b] px-2 py-1 font-medium text-[#4b3718] hover:bg-[#f8edcf] dark:border-[#755e35] dark:text-[#f4dfb7] dark:hover:bg-[#302716]"
+                >
+                  {accelerator}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {showHistory ? <NoteHistory onSelectNote={() => window.requestAnimationFrame(focusEditor)} /> : null}
 

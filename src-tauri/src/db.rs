@@ -21,6 +21,9 @@ pub enum AppError {
 
     #[error("empty notes cannot be created")]
     EmptyNote,
+
+    #[error("shortcut error: {0}")]
+    Shortcut(String),
 }
 
 impl serde::Serialize for AppError {

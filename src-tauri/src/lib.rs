@@ -16,6 +16,10 @@ pub fn run() {
             commands::hide_overlay,
             commands::center_overlay,
             commands::save_window_size,
+            commands::register_shortcut,
+            commands::get_registered_shortcut,
+            commands::get_shortcut_failure,
+            commands::quit_app,
             commands::create_note,
             commands::update_note,
             commands::list_notes,
@@ -29,7 +33,8 @@ pub fn run() {
             let database = db::Database::new()?;
             app.manage(database);
             tray::init(app.handle())?;
-            shortcuts::register_global_shortcuts(app.handle())?;
+            let database = app.state::<db::Database>();
+            shortcuts::register_global_shortcuts(app.handle(), &database);
             Ok(())
         })
         .on_window_event(|window, event| {

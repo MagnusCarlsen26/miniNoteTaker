@@ -31,6 +31,30 @@ pub fn save_window_size(
 }
 
 #[tauri::command]
+pub fn register_shortcut(
+    app: tauri::AppHandle,
+    database: tauri::State<Database>,
+    accelerator: String,
+) -> Result<(), AppError> {
+    crate::shortcuts::register_shortcut(&app, &database, accelerator)
+}
+
+#[tauri::command]
+pub fn get_registered_shortcut(database: tauri::State<Database>) -> Result<String, AppError> {
+    crate::shortcuts::registered_shortcut(&database)
+}
+
+#[tauri::command]
+pub fn get_shortcut_failure(database: tauri::State<Database>) -> Result<Option<String>, AppError> {
+    crate::shortcuts::shortcut_failure(&database)
+}
+
+#[tauri::command]
+pub fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+#[tauri::command]
 pub fn create_note(database: tauri::State<Database>, content: String) -> Result<NoteDto, AppError> {
     database.create_note(content)
 }
