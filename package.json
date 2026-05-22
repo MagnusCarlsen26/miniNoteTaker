@@ -11,6 +11,7 @@
     "check": "npm run build && npm test && cargo test --manifest-path src-tauri/Cargo.toml",
     "preview": "vite preview",
     "tauri": "tauri",
+    "install:local": "npm run tauri build && mkdir -p \"$HOME/.local/bin\" && if [ -f \"$HOME/.local/bin/quicknote\" ]; then cp \"$HOME/.local/bin/quicknote\" \"$HOME/.local/bin/quicknote.bak\"; fi && install -m 755 src-tauri/target/release/quicknote \"$HOME/.local/bin/quicknote\"",
     "tauri:dev:show": "tauri dev -- -- --show"
   },
   "dependencies": {

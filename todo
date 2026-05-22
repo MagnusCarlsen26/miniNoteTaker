@@ -1,5 +1,5 @@
 # Immediate Next
-- [ ] Folders concept
+- [x] Folders concept
 - [ ] Ability to edit delete old notes. -> Soft Delete. Create a trash section in dashboard and delete from their again to delete if finally
 - [ ] Increase ui size when seeing dashboard
 
