@@ -13,6 +13,7 @@ export type Note = {
   folders: Folder[];
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 };
 
 export type ThemePreference = "system" | "light" | "dark";

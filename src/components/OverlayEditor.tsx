@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import dayjs from "dayjs";
-import { Check, Folder, Home, NotebookText, PenSquare, Pin, Plus, Trash2 } from "lucide-react";
+import { Check, Folder, Home, NotebookText, PenSquare, Pin, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { ChangeEvent, KeyboardEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getRegisteredShortcut,
@@ -64,6 +64,7 @@ export function OverlayEditor() {
   const activeNote = useNoteStore((state) => state.activeNote);
   const draftContent = useNoteStore((state) => state.draftContent);
   const notes = useNoteStore((state) => state.notes);
+  const trashedNotes = useNoteStore((state) => state.trashedNotes);
   const folders = useNoteStore((state) => state.folders);
   const selectedFolderId = useNoteStore((state) => state.selectedFolderId);
   const folderError = useNoteStore((state) => state.folderError);
@@ -72,6 +73,10 @@ export function OverlayEditor() {
   const pendingSave = useNoteStore((state) => state.pendingSave);
   const setDraftContent = useNoteStore((state) => state.setDraftContent);
   const loadNotes = useNoteStore((state) => state.loadNotes);
+  const loadTrashedNotes = useNoteStore((state) => state.loadTrashedNotes);
+  const softDeleteNote = useNoteStore((state) => state.softDeleteNote);
+  const restoreNote = useNoteStore((state) => state.restoreNote);
+  const permanentlyDeleteNote = useNoteStore((state) => state.permanentlyDeleteNote);
   const loadFolders = useNoteStore((state) => state.loadFolders);
   const createFolder = useNoteStore((state) => state.createFolder);
   const deleteFolder = useNoteStore((state) => state.deleteFolder);
@@ -97,6 +102,8 @@ export function OverlayEditor() {
   const [newFolderName, setNewFolderName] = useState("");
   const [dashboardFolderName, setDashboardFolderName] = useState("");
   const [confirmDeleteFolderId, setConfirmDeleteFolderId] = useState<string | null>(null);
+  const [confirmSoftDeleteNoteId, setConfirmSoftDeleteNoteId] = useState<string | null>(null);
+  const [confirmPermanentDeleteNoteId, setConfirmPermanentDeleteNoteId] = useState<string | null>(null);
 
   const focusEditor = useCallback(() => {
     const textarea = textareaRef.current;
@@ -143,7 +150,8 @@ export function OverlayEditor() {
       }
     });
     void loadFolders();
-  }, [loadFolders, loadNotes, resetDraft]);
+    void loadTrashedNotes(1000);
+  }, [loadFolders, loadNotes, loadTrashedNotes, resetDraft]);
 
   useEffect(() => {
     let cleanupMediaListener: (() => void) | undefined;
@@ -242,15 +250,16 @@ export function OverlayEditor() {
   }, [activeNote?.id, setActiveNoteId]);
 
   useEffect(() => {
-    if (notes.length === 0) {
+    const selectableNotes = selectedSidebarItem === "trash" ? trashedNotes : notes;
+    if (selectableNotes.length === 0) {
       setSelectedHistoryNoteId(null);
       return;
     }
 
-    if (!selectedHistoryNoteId || !notes.some((note) => note.id === selectedHistoryNoteId)) {
-      setSelectedHistoryNoteId(notes[0]?.id ?? null);
+    if (!selectedHistoryNoteId || !selectableNotes.some((note) => note.id === selectedHistoryNoteId)) {
+      setSelectedHistoryNoteId(selectableNotes[0]?.id ?? null);
     }
-  }, [notes, selectedHistoryNoteId, setSelectedHistoryNoteId]);
+  }, [notes, selectedHistoryNoteId, selectedSidebarItem, setSelectedHistoryNoteId, trashedNotes]);
 
   useEffect(() => {
     if (selectedSidebarItem === "folders" && selectedFolderId) {
@@ -363,6 +372,7 @@ export function OverlayEditor() {
   }, [createFolder, dashboardFolderName, loadNotesByFolder]);
 
   const selectedHistoryNote = notes.find((note) => note.id === selectedHistoryNoteId) ?? null;
+  const selectedTrashedNote = trashedNotes.find((note) => note.id === selectedHistoryNoteId) ?? null;
   const activeFolders = activeNote?.folders ?? [];
   const activeFolderIds = new Set(activeFolders.map((folder) => folder.id));
   const selectedFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null;
@@ -376,6 +386,15 @@ export function OverlayEditor() {
     setViewMode("editor");
     window.requestAnimationFrame(focusEditor);
   }, [focusEditor, selectedHistoryNote, setViewMode]);
+
+  const moveSelectedNoteToTrash = useCallback(async () => {
+    if (!selectedHistoryNote) {
+      return;
+    }
+    await softDeleteNote(selectedHistoryNote.id);
+    setConfirmSoftDeleteNoteId(null);
+    setSelectedHistoryNoteId(null);
+  }, [selectedHistoryNote, setSelectedHistoryNoteId, softDeleteNote]);
 
   return (
     <main className="relative flex h-full min-h-0 flex-col bg-[#f7faf6] text-[#172116] dark:bg-[#11170f] dark:text-[#ecf3ea]">
@@ -568,6 +587,18 @@ export function OverlayEditor() {
               <Folder size={16} aria-hidden="true" />
               Folders
             </button>
+            <button
+              type="button"
+              aria-pressed={selectedSidebarItem === "trash"}
+              onClick={() => {
+                setSelectedSidebarItem("trash");
+                void loadTrashedNotes(1000);
+              }}
+              className="mt-1 flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[#253022] transition hover:bg-[#e5eee1] aria-pressed:bg-[#dce8d8] dark:text-[#e2eadf] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#263220]"
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              Trash
+            </button>
           </aside>
 
           <div className="flex min-h-0 flex-col px-4 py-3">
@@ -593,15 +624,28 @@ export function OverlayEditor() {
                         <div className="flex-1 whitespace-pre-wrap text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
                           {selectedHistoryNote.content}
                         </div>
-                        <div className="mt-4 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
+                        <div className="mt-4 flex items-center gap-2 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
                           <button
                             type="button"
-                            onMouseDown={(event) => handleMouseDownAction(event, openNoteInEditor)}
                             onClick={openNoteInEditor}
-                            className="inline-flex items-center gap-2 rounded-md bg-[#2f6b43] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
+                            aria-label="Edit note"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
                           >
                             <PenSquare size={15} aria-hidden="true" />
-                            
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Delete note"
+                            onClick={() => {
+                              if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
+                                void moveSelectedNoteToTrash();
+                              } else {
+                                setConfirmSoftDeleteNoteId(selectedHistoryNote.id);
+                              }
+                            }}
+                            className="inline-flex h-8 items-center justify-center rounded-md px-2 text-xs font-medium text-[#8a3d2b] transition hover:bg-[#fae9e4] dark:text-[#f0a394] dark:hover:bg-[#2a1b18]"
+                          >
+                            {confirmSoftDeleteNoteId === selectedHistoryNote.id ? "Delete?" : <Trash2 size={15} />}
                           </button>
                         </div>
                       </div>
@@ -704,8 +748,39 @@ export function OverlayEditor() {
                           title={selectedFolder.name}
                         />
                         {selectedHistoryNote ? (
-                          <div className="min-w-0 whitespace-pre-wrap text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
-                            {selectedHistoryNote.content}
+                          <div className="flex min-w-0 flex-col">
+                            <div className="mb-3 flex items-center justify-between gap-2 border-b border-[#dce5d8] pb-2 dark:border-[#2c3628]">
+                              <span className="truncate text-xs text-[#657064] dark:text-[#aeb9aa]">
+                                {dayjs(selectedHistoryNote.updated_at).format("MMM D, h:mm A")}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-1">
+                                <button
+                                  type="button"
+                                  aria-label="Edit note"
+                                  onClick={openNoteInEditor}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
+                                >
+                                  <PenSquare size={14} aria-hidden="true" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label="Delete note"
+                                  onClick={() => {
+                                    if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
+                                      void moveSelectedNoteToTrash();
+                                    } else {
+                                      setConfirmSoftDeleteNoteId(selectedHistoryNote.id);
+                                    }
+                                  }}
+                                  className="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium text-[#8a3d2b] hover:bg-[#fae9e4] dark:text-[#f0a394] dark:hover:bg-[#2a1b18]"
+                                >
+                                  {confirmSoftDeleteNoteId === selectedHistoryNote.id ? "Delete?" : <Trash2 size={14} />}
+                                </button>
+                              </span>
+                            </div>
+                            <div className="min-w-0 whitespace-pre-wrap text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
+                              {selectedHistoryNote.content}
+                            </div>
                           </div>
                         ) : null}
                       </div>
@@ -721,6 +796,73 @@ export function OverlayEditor() {
                   )}
                 </article>
               </div>
+            ) : null}
+            {selectedSidebarItem === "trash" ? (
+              trashedNotes.length > 0 ? (
+                <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[280px_1fr]">
+                  <div className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-3 dark:border-[#2c3628] dark:bg-[#141b12]">
+                    <NoteHistory
+                      selectedNoteId={selectedHistoryNoteId}
+                      onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                      notesOverride={trashedNotes}
+                      title="Trash"
+                      emptyTitle="Trash is empty"
+                      timestampField="deleted_at"
+                      ariaLabel="Trashed notes"
+                      maxVisible={1000}
+                    />
+                  </div>
+                  <article className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-4 dark:border-[#2c3628] dark:bg-[#141b12]">
+                    {selectedTrashedNote ? (
+                      <div className="flex h-full flex-col">
+                        <div className="mb-3 text-xs uppercase tracking-[0.16em] text-[#657064] dark:text-[#aeb9aa]">
+                          Deleted{" "}
+                          {dayjs(selectedTrashedNote.deleted_at ?? selectedTrashedNote.updated_at).format(
+                            "MMM D, YYYY h:mm A"
+                          )}
+                        </div>
+                        <h2 className="mb-3 text-lg font-semibold text-[#253022] dark:text-[#e2eadf]">
+                          {previewContent(selectedTrashedNote.content)}
+                        </h2>
+                        <div className="flex-1 whitespace-pre-wrap text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
+                          {selectedTrashedNote.content}
+                        </div>
+                        <div className="mt-4 flex items-center gap-2 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
+                          <button
+                            type="button"
+                            aria-label="Restore note"
+                            onClick={() => void restoreNote(selectedTrashedNote.id).then(() => setSelectedHistoryNoteId(null))}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
+                          >
+                            <RotateCcw size={15} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Permanently delete note"
+                            onClick={() => {
+                              if (confirmPermanentDeleteNoteId === selectedTrashedNote.id) {
+                                void permanentlyDeleteNote(selectedTrashedNote.id).then(() => {
+                                  setConfirmPermanentDeleteNoteId(null);
+                                  setSelectedHistoryNoteId(null);
+                                });
+                              } else {
+                                setConfirmPermanentDeleteNoteId(selectedTrashedNote.id);
+                              }
+                            }}
+                            className="inline-flex h-8 items-center justify-center rounded-md px-2 text-xs font-medium text-[#8a3d2b] transition hover:bg-[#fae9e4] dark:text-[#f0a394] dark:hover:bg-[#2a1b18]"
+                          >
+                            {confirmPermanentDeleteNoteId === selectedTrashedNote.id ? "Delete?" : <Trash2 size={15} />}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-[#dce5d8] bg-[#fbfdfb] text-sm text-[#657064] dark:border-[#2c3628] dark:bg-[#141b12] dark:text-[#aeb9aa]">
+                  Trash is empty
+                </div>
+              )
             ) : null}
           </div>
         </section>

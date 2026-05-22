@@ -9,6 +9,10 @@ type NoteHistoryProps = {
   onSelectNote: (note: Note) => void;
   notesOverride?: Note[];
   title?: string;
+  emptyTitle?: string;
+  timestampField?: "updated_at" | "deleted_at";
+  ariaLabel?: string;
+  maxVisible?: number;
 };
 
 function previewContent(note: Note) {
@@ -42,7 +46,16 @@ function formatRelativeTime(updatedAt: string) {
   return `${Math.max(months, 1)} months`;
 }
 
-export function NoteHistory({ selectedNoteId, onSelectNote, notesOverride, title = "Recent" }: NoteHistoryProps) {
+export function NoteHistory({
+  selectedNoteId,
+  onSelectNote,
+  notesOverride,
+  title = "Recent",
+  emptyTitle,
+  timestampField = "updated_at",
+  ariaLabel = "Recent notes",
+  maxVisible = 5
+}: NoteHistoryProps) {
   const storeNotes = useNoteStore((state) => state.notes);
   const notes = notesOverride ?? storeNotes;
   const initialIndex = useMemo(() => {
@@ -54,7 +67,7 @@ export function NoteHistory({ selectedNoteId, onSelectNote, notesOverride, title
     return noteIndex >= 0 ? noteIndex : 0;
   }, [notes, selectedNoteId]);
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
-  const visibleNotes = useMemo(() => notes.slice(0, 5), [notes]);
+  const visibleNotes = useMemo(() => notes.slice(0, maxVisible), [maxVisible, notes]);
 
   useEffect(() => {
     setSelectedIndex((index) => {
@@ -68,7 +81,9 @@ export function NoteHistory({ selectedNoteId, onSelectNote, notesOverride, title
   }, [selectedNoteId, visibleNotes]);
 
   if (visibleNotes.length === 0) {
-    return null;
+    return emptyTitle ? (
+      <div className="text-sm text-[#657064] dark:text-[#aeb9aa]">{emptyTitle}</div>
+    ) : null;
   }
 
   const handleMouseDownSelect = (event: MouseEvent<HTMLButtonElement>, note: Note) => {
@@ -84,7 +99,7 @@ export function NoteHistory({ selectedNoteId, onSelectNote, notesOverride, title
     <div
       className="border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]"
       role="listbox"
-      aria-label="Recent notes"
+      aria-label={ariaLabel}
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === "ArrowDown") {
@@ -131,7 +146,7 @@ export function NoteHistory({ selectedNoteId, onSelectNote, notesOverride, title
               ) : null}
             </span>
             <span className="whitespace-nowrap text-xs text-[#657064] dark:text-[#aeb9aa]">
-              {formatRelativeTime(note.updated_at)}
+              {formatRelativeTime(timestampField === "deleted_at" ? note.deleted_at ?? note.updated_at : note.updated_at)}
             </span>
           </button>
         ))}

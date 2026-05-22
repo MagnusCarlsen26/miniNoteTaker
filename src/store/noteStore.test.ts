@@ -9,12 +9,28 @@ vi.mock("../lib/tauri", () => ({
   listFolders: vi.fn(),
   listNotes: vi.fn(),
   listNotesByFolder: vi.fn(),
+  listTrashedNotes: vi.fn(),
+  permanentlyDeleteNote: vi.fn(),
+  restoreNote: vi.fn(),
   setPinned: vi.fn(),
   setNoteFolders: vi.fn(),
+  softDeleteNote: vi.fn(),
   updateNote: vi.fn()
 }));
 
-import { createFolder, createNote, deleteFolder, listFolders, listNotes, setNoteFolders, updateNote } from "../lib/tauri";
+import {
+  createFolder,
+  createNote,
+  deleteFolder,
+  listFolders,
+  listNotes,
+  listTrashedNotes,
+  permanentlyDeleteNote,
+  restoreNote,
+  setNoteFolders,
+  softDeleteNote,
+  updateNote
+} from "../lib/tauri";
 import { useNoteStore } from "./noteStore";
 
 const createNoteMock = vi.mocked(createNote);
@@ -22,7 +38,11 @@ const createFolderMock = vi.mocked(createFolder);
 const deleteFolderMock = vi.mocked(deleteFolder);
 const listFoldersMock = vi.mocked(listFolders);
 const listNotesMock = vi.mocked(listNotes);
+const listTrashedNotesMock = vi.mocked(listTrashedNotes);
+const permanentlyDeleteNoteMock = vi.mocked(permanentlyDeleteNote);
+const restoreNoteMock = vi.mocked(restoreNote);
 const setNoteFoldersMock = vi.mocked(setNoteFolders);
+const softDeleteNoteMock = vi.mocked(softDeleteNote);
 const updateNoteMock = vi.mocked(updateNote);
 
 function note(overrides: Partial<Note> = {}): Note {
@@ -33,6 +53,7 @@ function note(overrides: Partial<Note> = {}): Note {
     folders: [],
     created_at: "2026-05-21T00:00:00.000Z",
     updated_at: "2026-05-21T00:00:00.000Z",
+    deleted_at: null,
     ...overrides
   };
 }
@@ -42,9 +63,11 @@ function resetStore() {
     activeNote: null,
     draftContent: "",
     notes: [],
+    trashedNotes: [],
     folders: [],
     selectedFolderId: null,
     folderError: null,
+    trashError: null,
     saveStatus: "idle",
     saveError: null,
     pendingSave: null
@@ -242,16 +265,75 @@ describe("noteStore", () => {
     expect(useNoteStore.getState().activeNote).toEqual(assigned);
   });
 
-  it("deleting a folder reloads folders and notes", async () => {
+  it("soft deleting a note removes it from active notes and loads trash", async () => {
+    const active = note({ id: "active" });
+    const trashed = note({ id: "active", deleted_at: "2026-05-22T00:00:00.000Z" });
+    softDeleteNoteMock.mockResolvedValue(undefined);
+    listNotesMock.mockResolvedValue([]);
+    listTrashedNotesMock.mockResolvedValue([trashed]);
+    listFoldersMock.mockResolvedValue([]);
+    useNoteStore.setState({ notes: [active] });
+
+    await useNoteStore.getState().softDeleteNote("active");
+
+    expect(softDeleteNoteMock).toHaveBeenCalledWith("active");
+    expect(useNoteStore.getState().notes).toEqual([]);
+    expect(useNoteStore.getState().trashedNotes).toEqual([trashed]);
+  });
+
+  it("soft deleting the active note clears the editor draft", async () => {
+    const active = note({ id: "active", content: "draft" });
+    softDeleteNoteMock.mockResolvedValue(undefined);
+    listNotesMock.mockResolvedValue([]);
+    listTrashedNotesMock.mockResolvedValue([note({ id: "active", deleted_at: "2026-05-22T00:00:00.000Z" })]);
+    listFoldersMock.mockResolvedValue([]);
+    useNoteStore.setState({ activeNote: active, draftContent: "draft", pendingSave: { noteId: "active", content: "draft" } });
+
+    await useNoteStore.getState().softDeleteNote("active");
+
+    expect(useNoteStore.getState().activeNote).toBeNull();
+    expect(useNoteStore.getState().draftContent).toBe("");
+    expect(useNoteStore.getState().pendingSave).toBeNull();
+  });
+
+  it("restoring a note removes it from trash and upserts active notes", async () => {
+    const trashed = note({ id: "restore", deleted_at: "2026-05-22T00:00:00.000Z" });
+    const restored = note({ id: "restore", updated_at: "2026-05-22T00:01:00.000Z" });
+    restoreNoteMock.mockResolvedValue(restored);
+    listFoldersMock.mockResolvedValue([]);
+    useNoteStore.setState({ notes: [], trashedNotes: [trashed] });
+
+    await useNoteStore.getState().restoreNote("restore");
+
+    expect(restoreNoteMock).toHaveBeenCalledWith("restore");
+    expect(useNoteStore.getState().trashedNotes).toEqual([]);
+    expect(useNoteStore.getState().notes).toEqual([restored]);
+  });
+
+  it("permanently deleting removes note from trash", async () => {
+    const trashed = note({ id: "trash", deleted_at: "2026-05-22T00:00:00.000Z" });
+    permanentlyDeleteNoteMock.mockResolvedValue(undefined);
+    useNoteStore.setState({ trashedNotes: [trashed] });
+
+    await useNoteStore.getState().permanentlyDeleteNote("trash");
+
+    expect(permanentlyDeleteNoteMock).toHaveBeenCalledWith("trash");
+    expect(useNoteStore.getState().trashedNotes).toEqual([]);
+  });
+
+  it("deleting a folder reloads folders notes and trashed notes", async () => {
     const remaining = note({ id: "remaining" });
+    const trashed = note({ id: "trashed", deleted_at: "2026-05-22T00:00:00.000Z" });
     deleteFolderMock.mockResolvedValue(undefined);
     listFoldersMock.mockResolvedValue([]);
     listNotesMock.mockResolvedValue([remaining]);
+    listTrashedNotesMock.mockResolvedValue([trashed]);
 
     await useNoteStore.getState().deleteFolder("folder-1");
 
     expect(deleteFolderMock).toHaveBeenCalledWith("folder-1");
     expect(useNoteStore.getState().folders).toEqual([]);
     expect(useNoteStore.getState().notes).toEqual([remaining]);
+    expect(useNoteStore.getState().trashedNotes).toEqual([trashed]);
   });
 });

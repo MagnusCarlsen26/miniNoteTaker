@@ -57,6 +57,26 @@ export function setPinned(id: string, pinned: boolean): Promise<Note> {
   return invoke<Note>("set_pinned", { id, pinned });
 }
 
+export function softDeleteNote(id: string): Promise<void> {
+  return invoke<void>("soft_delete_note", { id });
+}
+
+export function restoreNote(id: string): Promise<Note> {
+  return invoke<Note>("restore_note", { id });
+}
+
+export function permanentlyDeleteNote(id: string): Promise<void> {
+  return invoke<void>("permanently_delete_note", { id });
+}
+
+export function listTrashedNotes(limit?: number): Promise<Note[]> {
+  return invoke<Note[]>("list_trashed_notes", { limit });
+}
+
+export function getTrashedNote(id: string): Promise<Note | null> {
+  return invoke<Note | null>("get_trashed_note", { id });
+}
+
 export function deleteEmptyNote(id: string): Promise<void> {
   return invoke<void>("delete_empty_note", { id });
 }
