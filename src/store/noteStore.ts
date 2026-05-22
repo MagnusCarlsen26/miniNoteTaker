@@ -7,8 +7,12 @@ import {
   listFolders,
   listNotes,
   listNotesByFolder,
+  listTrashedNotes,
+  permanentlyDeleteNote as permanentlyDeleteNoteCommand,
+  restoreNote as restoreNoteCommand,
   setPinned,
   setNoteFolders,
+  softDeleteNote as softDeleteNoteCommand,
   updateNote
 } from "../lib/tauri";
 import type { Folder, Note, SaveStatus } from "../types/note";
@@ -24,9 +28,11 @@ type NoteState = {
   activeNote: Note | null;
   draftContent: string;
   notes: Note[];
+  trashedNotes: Note[];
   folders: Folder[];
   selectedFolderId: string | null;
   folderError: string | null;
+  trashError: string | null;
   saveStatus: SaveStatus;
   saveError: string | null;
   pendingSave: PendingSave | null;
@@ -34,6 +40,10 @@ type NoteState = {
   setDraftContent: (content: string) => void;
   setActiveNote: (note: Note | null) => void;
   loadNotes: (limit?: number) => Promise<void>;
+  loadTrashedNotes: (limit?: number) => Promise<void>;
+  softDeleteNote: (id: string) => Promise<void>;
+  restoreNote: (id: string) => Promise<void>;
+  permanentlyDeleteNote: (id: string) => Promise<void>;
   loadFolders: () => Promise<void>;
   createFolder: (name: string) => Promise<Folder | null>;
   deleteFolder: (id: string) => Promise<void>;
@@ -87,9 +97,11 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   activeNote: null,
   draftContent: "",
   notes: [],
+  trashedNotes: [],
   folders: [],
   selectedFolderId: null,
   folderError: null,
+  trashError: null,
   saveStatus: "idle",
   saveError: null,
   pendingSave: null,
@@ -113,6 +125,53 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   loadNotes: async (limit) => {
     const notes = await listNotes(limit);
     set({ notes });
+  },
+
+  loadTrashedNotes: async (limit) => {
+    try {
+      const trashedNotes = await listTrashedNotes(limit);
+      set({ trashedNotes, trashError: null });
+    } catch (error) {
+      set({ trashedNotes: [], trashError: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  softDeleteNote: async (id) => {
+    await softDeleteNoteCommand(id);
+    const [notes, trashedNotes, folders] = await Promise.all([listNotes(), listTrashedNotes(), listFolders()]);
+    set((state) => {
+      const deletingActive = state.activeNote?.id === id;
+      return {
+        notes,
+        trashedNotes,
+        folders,
+        activeNote: deletingActive ? null : state.activeNote,
+        draftContent: deletingActive ? "" : state.draftContent,
+        saveStatus: deletingActive ? "idle" : state.saveStatus,
+        saveError: deletingActive ? null : state.saveError,
+        pendingSave: deletingActive ? null : state.pendingSave,
+        trashError: null
+      };
+    });
+  },
+
+  restoreNote: async (id) => {
+    const note = await restoreNoteCommand(id);
+    const folders = await listFolders();
+    set((state) => ({
+      trashedNotes: state.trashedNotes.filter((item) => item.id !== id),
+      notes: upsertNote(state.notes, note),
+      folders,
+      trashError: null
+    }));
+  },
+
+  permanentlyDeleteNote: async (id) => {
+    await permanentlyDeleteNoteCommand(id);
+    set((state) => ({
+      trashedNotes: state.trashedNotes.filter((note) => note.id !== id),
+      trashError: null
+    }));
   },
 
   loadFolders: async () => {
@@ -145,7 +204,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   deleteFolder: async (id) => {
     try {
       await deleteFolderCommand(id);
-      const [folders, notes] = await Promise.all([listFolders(), listNotes()]);
+      const [folders, notes, trashedNotes] = await Promise.all([listFolders(), listNotes(), listTrashedNotes()]);
       set((state) => {
         const activeStillExists = Boolean(
           state.activeNote && notes.some((note) => note.id === state.activeNote?.id)
@@ -153,6 +212,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         return {
           folders,
           notes,
+          trashedNotes,
           selectedFolderId:
             state.selectedFolderId === id ||
             !folders.some((folder) => folder.id === state.selectedFolderId)

@@ -91,6 +91,40 @@ pub fn set_pinned(
 }
 
 #[tauri::command]
+pub fn soft_delete_note(database: tauri::State<Database>, id: String) -> Result<(), AppError> {
+    database.soft_delete_note(id)
+}
+
+#[tauri::command]
+pub fn restore_note(database: tauri::State<Database>, id: String) -> Result<NoteDto, AppError> {
+    database.restore_note(id)
+}
+
+#[tauri::command]
+pub fn permanently_delete_note(
+    database: tauri::State<Database>,
+    id: String,
+) -> Result<(), AppError> {
+    database.permanently_delete_note(id)
+}
+
+#[tauri::command]
+pub fn list_trashed_notes(
+    database: tauri::State<Database>,
+    limit: Option<u32>,
+) -> Result<Vec<NoteDto>, AppError> {
+    database.list_trashed_notes(limit)
+}
+
+#[tauri::command]
+pub fn get_trashed_note(
+    database: tauri::State<Database>,
+    id: String,
+) -> Result<Option<NoteDto>, AppError> {
+    database.get_trashed_note(id)
+}
+
+#[tauri::command]
 pub fn delete_empty_note(database: tauri::State<Database>, id: String) -> Result<(), AppError> {
     database.delete_empty_note(id)
 }
