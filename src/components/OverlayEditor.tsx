@@ -267,6 +267,58 @@ export function OverlayEditor() {
     setLastCursorPosition(event.target.selectionStart);
   };
 
+  const moveToBodyStart = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea || draftContent.includes("\n") || draftContent.length === 0) {
+      return false;
+    }
+
+    const nextContent = `${draftContent}\n\n`;
+    setDraftContent(nextContent);
+    setLastCursorPosition(nextContent.length);
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextContent.length, nextContent.length);
+    });
+    return true;
+  }, [draftContent, setDraftContent, setLastCursorPosition]);
+
+  const handleEditorMouseDown = (event: MouseEvent<HTMLTextAreaElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const textarea = event.currentTarget;
+    const style = window.getComputedStyle(textarea);
+    const lineHeight = Number.parseFloat(style.lineHeight) || 24;
+    const clickedLine = Math.max(
+      0,
+      Math.floor((event.clientY - textarea.getBoundingClientRect().top + textarea.scrollTop) / lineHeight)
+    );
+    const currentLineCount = textarea.value.split("\n").length;
+    if (clickedLine >= currentLineCount) {
+      const missingLines = clickedLine - currentLineCount + 1;
+      const nextContent = `${draftContent}${"\n".repeat(missingLines)}`;
+      setDraftContent(nextContent);
+      setLastCursorPosition(nextContent.length);
+      window.requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(nextContent.length, nextContent.length);
+      });
+      event.preventDefault();
+    }
+  };
+
+  const handleEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || draftContent.includes("\n")) {
+      return;
+    }
+
+    if (event.currentTarget.selectionStart === draftContent.length && moveToBodyStart()) {
+      event.preventDefault();
+    }
+  };
+
   const handleShortcutFallback = (accelerator: string) => {
     void (async () => {
       try {
@@ -336,18 +388,22 @@ export function OverlayEditor() {
             </div>
           </header>
 
-          <textarea
-            ref={textareaRef}
-            value={draftContent}
-            placeholder="Write anything..."
-            spellCheck
-            onChange={handleChange}
-            onBlur={() => void flushSave()}
-            onClick={handleCursorChange}
-            onKeyUp={handleCursorChange}
-            onSelect={handleCursorChange}
-            className="min-h-0 flex-1 resize-none border-0 bg-transparent text-[15px] leading-6 text-[#172116] outline-none placeholder:text-[#8a9587] dark:text-[#ecf3ea] dark:placeholder:text-[#788475]"
-          />
+          <div className="relative min-h-0 flex-1">
+            <textarea
+              ref={textareaRef}
+              value={draftContent}
+              placeholder="Title"
+              spellCheck
+              onChange={handleChange}
+              onBlur={() => void flushSave()}
+              onMouseDown={handleEditorMouseDown}
+              onKeyDown={handleEditorKeyDown}
+              onClick={handleCursorChange}
+              onKeyUp={handleCursorChange}
+              onSelect={handleCursorChange}
+              className="h-full min-h-0 w-full resize-none border-0 bg-transparent bg-[linear-gradient(to_right,#c9d5c5,#c9d5c5)] bg-[length:100%_1px] bg-[position:0_1.5rem] bg-no-repeat text-[15px] leading-6 text-[#172116] outline-none placeholder:text-[#8a9587] dark:bg-[linear-gradient(to_right,#3d4939,#3d4939)] dark:text-[#ecf3ea] dark:placeholder:text-[#788475]"
+            />
+          </div>
 
           {shortcutFailure ? (
             <div className="rounded-md border border-[#d6c7a7] bg-[#fff8e8] px-3 py-2 text-xs text-[#60451d] dark:border-[#5c4a2e] dark:bg-[#211b12] dark:text-[#f0d8a8]">
