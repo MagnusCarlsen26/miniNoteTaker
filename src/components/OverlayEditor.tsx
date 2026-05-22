@@ -534,12 +534,6 @@ export function OverlayEditor() {
             <button
               type="button"
               aria-pressed={selectedSidebarItem === "trash"}
-              onMouseDown={(event) =>
-                handleMouseDownAction(event, () => {
-                  setSelectedSidebarItem("trash");
-                  void loadTrashedNotes(1000);
-                })
-              }
               onClick={() => {
                 setSelectedSidebarItem("trash");
                 void loadTrashedNotes(1000);
@@ -577,7 +571,6 @@ export function OverlayEditor() {
                         <div className="mt-4 flex items-center gap-2 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
                           <button
                             type="button"
-                            onMouseDown={(event) => handleMouseDownAction(event, openNoteInEditor)}
                             onClick={openNoteInEditor}
                             aria-label="Edit note"
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
@@ -586,16 +579,7 @@ export function OverlayEditor() {
                           </button>
                           <button
                             type="button"
-                            aria-label="Move note to trash"
-                            onMouseDown={(event) =>
-                              handleMouseDownAction(event, () => {
-                                if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
-                                  void moveSelectedNoteToTrash();
-                                } else {
-                                  setConfirmSoftDeleteNoteId(selectedHistoryNote.id);
-                                }
-                              })
-                            }
+                            aria-label="Delete note"
                             onClick={() => {
                               if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
                                 void moveSelectedNoteToTrash();
@@ -605,7 +589,7 @@ export function OverlayEditor() {
                             }}
                             className="inline-flex h-8 items-center justify-center rounded-md px-2 text-xs font-medium text-[#8a3d2b] transition hover:bg-[#fae9e4] dark:text-[#f0a394] dark:hover:bg-[#2a1b18]"
                           >
-                            {confirmSoftDeleteNoteId === selectedHistoryNote.id ? "Move?" : <Trash2 size={15} />}
+                            {confirmSoftDeleteNoteId === selectedHistoryNote.id ? "Delete?" : <Trash2 size={15} />}
                           </button>
                         </div>
                       </div>
@@ -717,7 +701,6 @@ export function OverlayEditor() {
                                 <button
                                   type="button"
                                   aria-label="Edit note"
-                                  onMouseDown={(event) => handleMouseDownAction(event, openNoteInEditor)}
                                   onClick={openNoteInEditor}
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
                                 >
@@ -725,16 +708,7 @@ export function OverlayEditor() {
                                 </button>
                                 <button
                                   type="button"
-                                  aria-label="Move note to trash"
-                                  onMouseDown={(event) =>
-                                    handleMouseDownAction(event, () => {
-                                      if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
-                                        void moveSelectedNoteToTrash();
-                                      } else {
-                                        setConfirmSoftDeleteNoteId(selectedHistoryNote.id);
-                                      }
-                                    })
-                                  }
+                                  aria-label="Delete note"
                                   onClick={() => {
                                     if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
                                       void moveSelectedNoteToTrash();
@@ -744,7 +718,7 @@ export function OverlayEditor() {
                                   }}
                                   className="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium text-[#8a3d2b] hover:bg-[#fae9e4] dark:text-[#f0a394] dark:hover:bg-[#2a1b18]"
                                 >
-                                  {confirmSoftDeleteNoteId === selectedHistoryNote.id ? "Move?" : <Trash2 size={14} />}
+                                  {confirmSoftDeleteNoteId === selectedHistoryNote.id ? "Delete?" : <Trash2 size={14} />}
                                 </button>
                               </span>
                             </div>
@@ -801,11 +775,6 @@ export function OverlayEditor() {
                           <button
                             type="button"
                             aria-label="Restore note"
-                            onMouseDown={(event) =>
-                              handleMouseDownAction(event, () => {
-                                void restoreNote(selectedTrashedNote.id).then(() => setSelectedHistoryNoteId(null));
-                              })
-                            }
                             onClick={() => void restoreNote(selectedTrashedNote.id).then(() => setSelectedHistoryNoteId(null))}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
                           >
@@ -814,18 +783,6 @@ export function OverlayEditor() {
                           <button
                             type="button"
                             aria-label="Permanently delete note"
-                            onMouseDown={(event) =>
-                              handleMouseDownAction(event, () => {
-                                if (confirmPermanentDeleteNoteId === selectedTrashedNote.id) {
-                                  void permanentlyDeleteNote(selectedTrashedNote.id).then(() => {
-                                    setConfirmPermanentDeleteNoteId(null);
-                                    setSelectedHistoryNoteId(null);
-                                  });
-                                } else {
-                                  setConfirmPermanentDeleteNoteId(selectedTrashedNote.id);
-                                }
-                              })
-                            }
                             onClick={() => {
                               if (confirmPermanentDeleteNoteId === selectedTrashedNote.id) {
                                 void permanentlyDeleteNote(selectedTrashedNote.id).then(() => {
