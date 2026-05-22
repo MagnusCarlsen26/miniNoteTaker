@@ -17,7 +17,6 @@ import { useAppShortcuts } from "../hooks/useAppShortcuts";
 import { useAutosaveNote } from "../hooks/useAutosaveNote";
 import { useNoteStore } from "../store/noteStore";
 import { useUiStore } from "../store/uiStore";
-import type { ViewMode } from "../store/uiStore";
 import type { SaveStatus, ThemePreference } from "../types/note";
 import { NoteHistory } from "./NoteHistory";
 import { ShortcutHint } from "./ShortcutHint";
@@ -57,20 +56,8 @@ function compactFolderName(name: string) {
   return trimmed.length > 6 ? `${trimmed.slice(0, 6)}...` : trimmed;
 }
 
-const EDITOR_WINDOW_SIZE = { width: 600, height: 400 };
-const DASHBOARD_WINDOW_SIZE = { width: 920, height: 560 };
-
-async function resizeOverlayWindow(viewMode: ViewMode): Promise<void> {
-  const window = getCurrentWindow();
-  const nextSize = viewMode === "home" ? DASHBOARD_WINDOW_SIZE : EDITOR_WINDOW_SIZE;
-
-  try {
-    await window.setSize(new LogicalSize(nextSize.width, nextSize.height));
-    await window.center();
-  } catch {
-    // Window resize/center should not interrupt overlay usage.
-  }
-}
+const EDITOR_WINDOW_SIZE = new LogicalSize(600, 400);
+const DASHBOARD_WINDOW_SIZE = new LogicalSize(920, 560);
 
 export function OverlayEditor() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -125,17 +112,9 @@ export function OverlayEditor() {
   const closeOverlay = useCallback(async () => {
     setLastCursorPosition(textareaRef.current?.selectionStart ?? 0);
     await flushSave();
-    const window = getCurrentWindow();
     try {
-      if (viewMode === "home") {
-        setViewMode("editor");
-        await resizeOverlayWindow("editor");
-      } else {
-        const physicalSize = await window.innerSize();
-        const scaleFactor = await window.scaleFactor();
-        const logicalSize = physicalSize.toLogical(scaleFactor);
-        await saveWindowSize(logicalSize.width, logicalSize.height);
-      }
+      const { width, height } = await getCurrentWindow().outerSize();
+      await saveWindowSize(width, height);
     } catch {
       // Window size persistence should never block closing the overlay.
     }
@@ -144,15 +123,7 @@ export function OverlayEditor() {
     setViewMode("editor");
     await hideOverlay();
     setOverlayVisible(false);
-  }, [
-    flushSave,
-    resetDraft,
-    setLastCursorPosition,
-    setOverlayVisible,
-    setSelectedHistoryNoteId,
-    setViewMode,
-    viewMode
-  ]);
+  }, [flushSave, resetDraft, setLastCursorPosition, setOverlayVisible, setSelectedHistoryNoteId, setViewMode]);
 
   useAppShortcuts({ textareaRef, closeOverlay, flushSave });
 
@@ -203,7 +174,6 @@ export function OverlayEditor() {
         setShortcutFailure(null);
         registeredShortcutRef.current = "Super+Space";
       }
-      await resizeOverlayWindow(useUiStore.getState().viewMode);
       window.requestAnimationFrame(focusEditor);
     });
 
@@ -213,7 +183,17 @@ export function OverlayEditor() {
   }, [focusEditor, setOverlayVisible, setShortcutFailure]);
 
   useEffect(() => {
-    void resizeOverlayWindow(viewMode);
+    const window = getCurrentWindow();
+    const nextSize = viewMode === "home" ? DASHBOARD_WINDOW_SIZE : EDITOR_WINDOW_SIZE;
+
+    void (async () => {
+      try {
+        await window.setSize(nextSize);
+        await window.center();
+      } catch {
+        // Window resize/center should not interrupt overlay usage.
+      }
+    })();
   }, [viewMode]);
 
   useEffect(() => {
