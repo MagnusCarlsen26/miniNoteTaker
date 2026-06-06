@@ -1,12 +1,14 @@
 import dayjs from "dayjs";
 import { Pin } from "lucide-react";
 import { MouseEvent, useEffect, useMemo, useState } from "react";
+import { previewContent } from "../lib/notePreview";
 import { useNoteStore } from "../store/noteStore";
 import type { Note } from "../types/note";
 
 type NoteHistoryProps = {
   selectedNoteId: string | null;
   onSelectNote: (note: Note) => void;
+  onOpenNote?: (note: Note) => void;
   notesOverride?: Note[];
   title?: string;
   emptyTitle?: string;
@@ -14,10 +16,6 @@ type NoteHistoryProps = {
   ariaLabel?: string;
   maxVisible?: number;
 };
-
-function previewContent(note: Note) {
-  return note.content.replace(/\s+/g, " ").trim() || "Empty note";
-}
 
 function formatRelativeTime(updatedAt: string) {
   const now = dayjs();
@@ -49,12 +47,13 @@ function formatRelativeTime(updatedAt: string) {
 export function NoteHistory({
   selectedNoteId,
   onSelectNote,
+  onOpenNote,
   notesOverride,
   title = "Recent",
   emptyTitle,
   timestampField = "updated_at",
   ariaLabel = "Recent notes",
-  maxVisible = 5
+  maxVisible = 1000
 }: NoteHistoryProps) {
   const storeNotes = useNoteStore((state) => state.notes);
   const notes = notesOverride ?? storeNotes;
@@ -114,7 +113,11 @@ export function NoteHistory({
           event.preventDefault();
           const note = visibleNotes[selectedIndex];
           if (note) {
-            onSelectNote(note);
+            if (onOpenNote) {
+              onOpenNote(note);
+            } else {
+              onSelectNote(note);
+            }
           }
         }
       }}
@@ -131,14 +134,14 @@ export function NoteHistory({
             aria-selected={note.id === selectedNoteId || index === selectedIndex}
             onMouseEnter={() => setSelectedIndex(index)}
             onMouseDown={(event) => handleMouseDownSelect(event, note)}
-            onClick={() => onSelectNote(note)}
+            onDoubleClick={() => onOpenNote?.(note)}
             className="grid h-9 grid-cols-[1fr_auto] items-center gap-3 rounded-md px-2 text-left text-sm text-[#253022] transition hover:bg-[#eef4ec] aria-selected:bg-[#e5eee1] dark:text-[#e2eadf] dark:hover:bg-[#202a1d] dark:aria-selected:bg-[#263220]"
           >
             <span className="flex min-w-0 items-center gap-2">
               {note.pinned ? (
                 <Pin size={13} className="shrink-0 text-[#2f6b43] dark:text-[#8ed081]" aria-hidden="true" />
               ) : null}
-              <span className="truncate">{previewContent(note)}</span>
+              <span className="truncate">{previewContent(note.content)}</span>
               {note.folders.length > 0 ? (
                 <span className="shrink-0 rounded border border-[#dce5d8] px-1 text-[10px] text-[#657064] dark:border-[#2c3628] dark:text-[#aeb9aa]">
                   {note.folders.length === 1 ? note.folders[0].name : note.folders.length}

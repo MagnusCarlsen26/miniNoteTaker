@@ -16,12 +16,11 @@ function resetStore() {
 
 describe("useAutosaveNote", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     vi.clearAllMocks();
     resetStore();
   });
 
-  it("debounces writes by 300ms", () => {
+  it("does not auto-save on dirty state", () => {
     const saveDraft = vi.fn().mockResolvedValue(null);
     useNoteStore.setState({ saveDraft });
     renderHook(() => useAutosaveNote());
@@ -30,18 +29,10 @@ describe("useAutosaveNote", () => {
       useNoteStore.setState({ draftContent: "dirty", saveStatus: "dirty" });
     });
 
-    act(() => {
-      vi.advanceTimersByTime(299);
-    });
     expect(saveDraft).not.toHaveBeenCalled();
-
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(saveDraft).toHaveBeenCalledTimes(1);
   });
 
-  it("flushSave clears pending debounce and saves immediately", async () => {
+  it("flushSave saves immediately when dirty", async () => {
     const saveDraft = vi.fn().mockImplementation(async () => {
       useNoteStore.setState({ saveStatus: "saved" });
       return null;
@@ -57,11 +48,6 @@ describe("useAutosaveNote", () => {
       await result.current.flushSave();
     });
 
-    expect(saveDraft).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
     expect(saveDraft).toHaveBeenCalledTimes(1);
   });
 

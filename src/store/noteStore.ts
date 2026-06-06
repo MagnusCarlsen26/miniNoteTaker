@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import {
+  archiveNote as archiveNoteCommand,
   createFolder as createFolderCommand,
   createNote,
   deleteFolder as deleteFolderCommand,
   deleteEmptyNote,
+  listArchivedNotes,
   listFolders,
   listNotes,
   listNotesByFolder,
@@ -13,6 +15,7 @@ import {
   setPinned,
   setNoteFolders,
   softDeleteNote as softDeleteNoteCommand,
+  unarchiveNote as unarchiveNoteCommand,
   updateNote
 } from "../lib/tauri";
 import type { Folder, Note, SaveStatus } from "../types/note";
@@ -29,6 +32,7 @@ type NoteState = {
   draftContent: string;
   notes: Note[];
   trashedNotes: Note[];
+  archivedNotes: Note[];
   folders: Folder[];
   selectedFolderId: string | null;
   folderError: string | null;
@@ -41,6 +45,9 @@ type NoteState = {
   setActiveNote: (note: Note | null) => void;
   loadNotes: (limit?: number) => Promise<void>;
   loadTrashedNotes: (limit?: number) => Promise<void>;
+  loadArchivedNotes: (limit?: number) => Promise<void>;
+  archiveNote: (id: string) => Promise<void>;
+  unarchiveNote: (id: string) => Promise<void>;
   softDeleteNote: (id: string) => Promise<void>;
   restoreNote: (id: string) => Promise<void>;
   permanentlyDeleteNote: (id: string) => Promise<void>;
@@ -98,6 +105,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   draftContent: "",
   notes: [],
   trashedNotes: [],
+  archivedNotes: [],
   folders: [],
   selectedFolderId: null,
   folderError: null,
@@ -136,14 +144,61 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     }
   },
 
+  loadArchivedNotes: async (limit) => {
+    const archivedNotes = await listArchivedNotes(limit);
+    set({ archivedNotes });
+  },
+
+  archiveNote: async (id) => {
+    await archiveNoteCommand(id);
+    const [notes, archivedNotes, folders] = await Promise.all([
+      listNotes(),
+      listArchivedNotes(),
+      listFolders()
+    ]);
+    set((state) => {
+      const archivingActive = state.activeNote?.id === id;
+      return {
+        notes,
+        archivedNotes,
+        folders,
+        activeNote: archivingActive ? null : state.activeNote,
+        draftContent: archivingActive ? "" : state.draftContent,
+        saveStatus: archivingActive ? "idle" : state.saveStatus,
+        saveError: archivingActive ? null : state.saveError,
+        pendingSave: archivingActive ? null : state.pendingSave
+      };
+    });
+  },
+
+  unarchiveNote: async (id) => {
+    const note = await unarchiveNoteCommand(id);
+    const [notes, archivedNotes, folders] = await Promise.all([
+      listNotes(),
+      listArchivedNotes(),
+      listFolders()
+    ]);
+    set((state) => ({
+      notes: upsertNote(state.notes, note),
+      archivedNotes,
+      folders
+    }));
+  },
+
   softDeleteNote: async (id) => {
     await softDeleteNoteCommand(id);
-    const [notes, trashedNotes, folders] = await Promise.all([listNotes(), listTrashedNotes(), listFolders()]);
+    const [notes, trashedNotes, archivedNotes, folders] = await Promise.all([
+      listNotes(),
+      listTrashedNotes(),
+      listArchivedNotes(),
+      listFolders()
+    ]);
     set((state) => {
       const deletingActive = state.activeNote?.id === id;
       return {
         notes,
         trashedNotes,
+        archivedNotes,
         folders,
         activeNote: deletingActive ? null : state.activeNote,
         draftContent: deletingActive ? "" : state.draftContent,

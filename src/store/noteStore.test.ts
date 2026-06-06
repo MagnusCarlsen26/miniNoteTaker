@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Note } from "../types/note";
 
 vi.mock("../lib/tauri", () => ({
+  archiveNote: vi.fn(),
   createFolder: vi.fn(),
   createNote: vi.fn(),
   deleteFolder: vi.fn(),
   deleteEmptyNote: vi.fn(),
+  listArchivedNotes: vi.fn(),
   listFolders: vi.fn(),
   listNotes: vi.fn(),
   listNotesByFolder: vi.fn(),
@@ -15,13 +17,16 @@ vi.mock("../lib/tauri", () => ({
   setPinned: vi.fn(),
   setNoteFolders: vi.fn(),
   softDeleteNote: vi.fn(),
+  unarchiveNote: vi.fn(),
   updateNote: vi.fn()
 }));
 
 import {
+  archiveNote,
   createFolder,
   createNote,
   deleteFolder,
+  listArchivedNotes,
   listFolders,
   listNotes,
   listTrashedNotes,
@@ -29,11 +34,15 @@ import {
   restoreNote,
   setNoteFolders,
   softDeleteNote,
+  unarchiveNote,
   updateNote
 } from "../lib/tauri";
 import { useNoteStore } from "./noteStore";
 
+const archiveNoteMock = vi.mocked(archiveNote);
 const createNoteMock = vi.mocked(createNote);
+const listArchivedNotesMock = vi.mocked(listArchivedNotes);
+const unarchiveNoteMock = vi.mocked(unarchiveNote);
 const createFolderMock = vi.mocked(createFolder);
 const deleteFolderMock = vi.mocked(deleteFolder);
 const listFoldersMock = vi.mocked(listFolders);
@@ -54,6 +63,7 @@ function note(overrides: Partial<Note> = {}): Note {
     created_at: "2026-05-21T00:00:00.000Z",
     updated_at: "2026-05-21T00:00:00.000Z",
     deleted_at: null,
+    archived_at: null,
     ...overrides
   };
 }
@@ -64,6 +74,7 @@ function resetStore() {
     draftContent: "",
     notes: [],
     trashedNotes: [],
+    archivedNotes: [],
     folders: [],
     selectedFolderId: null,
     folderError: null,
@@ -271,6 +282,7 @@ describe("noteStore", () => {
     softDeleteNoteMock.mockResolvedValue(undefined);
     listNotesMock.mockResolvedValue([]);
     listTrashedNotesMock.mockResolvedValue([trashed]);
+    listArchivedNotesMock.mockResolvedValue([]);
     listFoldersMock.mockResolvedValue([]);
     useNoteStore.setState({ notes: [active] });
 
@@ -286,6 +298,7 @@ describe("noteStore", () => {
     softDeleteNoteMock.mockResolvedValue(undefined);
     listNotesMock.mockResolvedValue([]);
     listTrashedNotesMock.mockResolvedValue([note({ id: "active", deleted_at: "2026-05-22T00:00:00.000Z" })]);
+    listArchivedNotesMock.mockResolvedValue([]);
     listFoldersMock.mockResolvedValue([]);
     useNoteStore.setState({ activeNote: active, draftContent: "draft", pendingSave: { noteId: "active", content: "draft" } });
 
@@ -319,6 +332,38 @@ describe("noteStore", () => {
 
     expect(permanentlyDeleteNoteMock).toHaveBeenCalledWith("trash");
     expect(useNoteStore.getState().trashedNotes).toEqual([]);
+  });
+
+  it("archiving a note removes it from active notes and loads archive", async () => {
+    const active = note({ id: "active" });
+    const archived = note({ id: "active", archived_at: "2026-05-22T00:00:00.000Z", pinned: false });
+    archiveNoteMock.mockResolvedValue(archived);
+    listNotesMock.mockResolvedValue([]);
+    listArchivedNotesMock.mockResolvedValue([archived]);
+    listFoldersMock.mockResolvedValue([]);
+    useNoteStore.setState({ notes: [active] });
+
+    await useNoteStore.getState().archiveNote("active");
+
+    expect(archiveNoteMock).toHaveBeenCalledWith("active");
+    expect(useNoteStore.getState().notes).toEqual([]);
+    expect(useNoteStore.getState().archivedNotes).toEqual([archived]);
+  });
+
+  it("unarchiving a note restores it to active notes", async () => {
+    const archived = note({ id: "restore", archived_at: "2026-05-22T00:00:00.000Z" });
+    const restored = note({ id: "restore", updated_at: "2026-05-22T00:01:00.000Z" });
+    unarchiveNoteMock.mockResolvedValue(restored);
+    listNotesMock.mockResolvedValue([restored]);
+    listArchivedNotesMock.mockResolvedValue([]);
+    listFoldersMock.mockResolvedValue([]);
+    useNoteStore.setState({ archivedNotes: [archived] });
+
+    await useNoteStore.getState().unarchiveNote("restore");
+
+    expect(unarchiveNoteMock).toHaveBeenCalledWith("restore");
+    expect(useNoteStore.getState().archivedNotes).toEqual([]);
+    expect(useNoteStore.getState().notes).toEqual([restored]);
   });
 
   it("deleting a folder reloads folders notes and trashed notes", async () => {

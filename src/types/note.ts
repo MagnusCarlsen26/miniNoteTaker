@@ -14,6 +14,7 @@ export type Note = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  archived_at: string | null;
 };
 
 export type ThemePreference = "system" | "light" | "dark";

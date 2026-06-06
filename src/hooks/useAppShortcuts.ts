@@ -1,16 +1,14 @@
-import type { RefObject } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useNoteStore } from "../store/noteStore";
 import { useUiStore } from "../store/uiStore";
-import type { Note } from "../types/note";
 
 type UseAppShortcutsOptions = {
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  getCursorPosition: () => number;
+  focusEditor: () => void;
   closeOverlay: () => Promise<void>;
-  flushSave: () => Promise<Note | null>;
 };
 
-export function useAppShortcuts({ textareaRef, closeOverlay, flushSave }: UseAppShortcutsOptions) {
+export function useAppShortcuts({ getCursorPosition, focusEditor, closeOverlay }: UseAppShortcutsOptions) {
   const resetDraft = useNoteStore((state) => state.resetDraft);
   const togglePinned = useNoteStore((state) => state.togglePinned);
   const setLastCursorPosition = useUiStore((state) => state.setLastCursorPosition);
@@ -19,27 +17,23 @@ export function useAppShortcuts({ textareaRef, closeOverlay, flushSave }: UseApp
     "escape",
     (event) => {
       event.preventDefault();
-      setLastCursorPosition(textareaRef.current?.selectionStart ?? 0);
+      setLastCursorPosition(getCursorPosition());
       void closeOverlay();
     },
     { enableOnFormTags: true },
-    [closeOverlay, setLastCursorPosition, textareaRef]
+    [closeOverlay, getCursorPosition, setLastCursorPosition]
   );
 
   useHotkeys(
     "ctrl+n, meta+n",
     (event) => {
       event.preventDefault();
-
-      void (async () => {
-        await flushSave();
-        resetDraft();
-        setLastCursorPosition(0);
-        window.requestAnimationFrame(() => textareaRef.current?.focus());
-      })();
+      resetDraft();
+      setLastCursorPosition(0);
+      window.requestAnimationFrame(focusEditor);
     },
     { enableOnFormTags: true },
-    [flushSave, resetDraft, setLastCursorPosition, textareaRef]
+    [focusEditor, resetDraft, setLastCursorPosition]
   );
 
   useHotkeys(

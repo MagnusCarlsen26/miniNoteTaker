@@ -1,8 +1,21 @@
+import type { EditorView } from "@codemirror/view";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import dayjs from "dayjs";
-import { Check, Folder, Home, NotebookText, PenSquare, Pin, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { ChangeEvent, KeyboardEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Archive,
+  ArchiveRestore,
+  Check,
+  Folder,
+  Home,
+  NotebookText,
+  PenSquare,
+  Pin,
+  Plus,
+  RotateCcw,
+  Trash2
+} from "lucide-react";
+import { KeyboardEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getRegisteredShortcut,
   getSetting,
@@ -12,12 +25,14 @@ import {
   registerShortcut,
   saveWindowSize
 } from "../lib/tauri";
+import { previewContent } from "../lib/notePreview";
 import { shouldUseDarkTheme } from "../lib/theme";
 import { useAppShortcuts } from "../hooks/useAppShortcuts";
 import { useAutosaveNote } from "../hooks/useAutosaveNote";
 import { useNoteStore } from "../store/noteStore";
 import { useUiStore } from "../store/uiStore";
-import type { SaveStatus, ThemePreference } from "../types/note";
+import type { Note, SaveStatus, ThemePreference } from "../types/note";
+import { focusNoteEditor, getNoteEditorCursorPosition, NoteEditor } from "./NoteEditor";
 import { NoteHistory } from "./NoteHistory";
 import { ShortcutHint } from "./ShortcutHint";
 import { Toast } from "./Toast";
@@ -47,10 +62,6 @@ function applyTheme(theme: ThemePreference) {
   root.classList.toggle("dark", shouldUseDarkTheme(theme, systemPrefersDark));
 }
 
-function previewContent(content: string) {
-  return content.replace(/\s+/g, " ").trim() || "Empty note";
-}
-
 function compactFolderName(name: string) {
   const trimmed = name.trim();
   return trimmed.length > 6 ? `${trimmed.slice(0, 6)}...` : trimmed;
@@ -60,11 +71,13 @@ const EDITOR_WINDOW_SIZE = new LogicalSize(600, 400);
 const DASHBOARD_WINDOW_SIZE = new LogicalSize(920, 560);
 
 export function OverlayEditor() {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
+  const folderPanelRef = useRef<HTMLDivElement | null>(null);
   const activeNote = useNoteStore((state) => state.activeNote);
   const draftContent = useNoteStore((state) => state.draftContent);
   const notes = useNoteStore((state) => state.notes);
   const trashedNotes = useNoteStore((state) => state.trashedNotes);
+  const archivedNotes = useNoteStore((state) => state.archivedNotes);
   const folders = useNoteStore((state) => state.folders);
   const selectedFolderId = useNoteStore((state) => state.selectedFolderId);
   const folderError = useNoteStore((state) => state.folderError);
@@ -74,6 +87,10 @@ export function OverlayEditor() {
   const setDraftContent = useNoteStore((state) => state.setDraftContent);
   const loadNotes = useNoteStore((state) => state.loadNotes);
   const loadTrashedNotes = useNoteStore((state) => state.loadTrashedNotes);
+  const loadArchivedNotes = useNoteStore((state) => state.loadArchivedNotes);
+  const archiveNote = useNoteStore((state) => state.archiveNote);
+  const unarchiveNote = useNoteStore((state) => state.unarchiveNote);
+  const setActiveNote = useNoteStore((state) => state.setActiveNote);
   const softDeleteNote = useNoteStore((state) => state.softDeleteNote);
   const restoreNote = useNoteStore((state) => state.restoreNote);
   const permanentlyDeleteNote = useNoteStore((state) => state.permanentlyDeleteNote);
@@ -96,7 +113,7 @@ export function OverlayEditor() {
   const setSelectedSidebarItem = useUiStore((state) => state.setSelectedSidebarItem);
   const selectedHistoryNoteId = useUiStore((state) => state.selectedHistoryNoteId);
   const setSelectedHistoryNoteId = useUiStore((state) => state.setSelectedHistoryNoteId);
-  const { flushSave } = useAutosaveNote({ debounceMs: 300 });
+  const { flushSave } = useAutosaveNote();
   const registeredShortcutRef = useRef("Super+Space");
   const [folderPanelOpen, setFolderPanelOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -104,20 +121,20 @@ export function OverlayEditor() {
   const [confirmDeleteFolderId, setConfirmDeleteFolderId] = useState<string | null>(null);
   const [confirmSoftDeleteNoteId, setConfirmSoftDeleteNoteId] = useState<string | null>(null);
   const [confirmPermanentDeleteNoteId, setConfirmPermanentDeleteNoteId] = useState<string | null>(null);
+  const [confirmArchiveNoteId, setConfirmArchiveNoteId] = useState<string | null>(null);
+  const [pendingOpenNote, setPendingOpenNote] = useState<Note | null>(null);
+
+  const getCursorPosition = useCallback(
+    () => getNoteEditorCursorPosition(editorViewRef.current),
+    []
+  );
 
   const focusEditor = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      return;
-    }
-
-    textarea.focus();
-    const cursorPosition = Math.min(useUiStore.getState().lastCursorPosition, textarea.value.length);
-    textarea.setSelectionRange(cursorPosition, cursorPosition);
+    focusNoteEditor(editorViewRef.current, useUiStore.getState().lastCursorPosition);
   }, []);
 
   const closeOverlay = useCallback(async () => {
-    setLastCursorPosition(textareaRef.current?.selectionStart ?? 0);
+    setLastCursorPosition(getCursorPosition());
     await flushSave();
     try {
       const { width, height } = await getCurrentWindow().outerSize();
@@ -130,9 +147,9 @@ export function OverlayEditor() {
     setViewMode("editor");
     await hideOverlay();
     setOverlayVisible(false);
-  }, [flushSave, resetDraft, setLastCursorPosition, setOverlayVisible, setSelectedHistoryNoteId, setViewMode]);
+  }, [flushSave, getCursorPosition, resetDraft, setLastCursorPosition, setOverlayVisible, setSelectedHistoryNoteId, setViewMode]);
 
-  useAppShortcuts({ textareaRef, closeOverlay, flushSave });
+  useAppShortcuts({ getCursorPosition, focusEditor, closeOverlay });
 
   const noteTimestamp = useMemo(() => {
     if (!activeNote) {
@@ -151,7 +168,8 @@ export function OverlayEditor() {
     });
     void loadFolders();
     void loadTrashedNotes(1000);
-  }, [loadFolders, loadNotes, loadTrashedNotes, resetDraft]);
+    void loadArchivedNotes(1000);
+  }, [loadArchivedNotes, loadFolders, loadNotes, loadTrashedNotes, resetDraft]);
 
   useEffect(() => {
     let cleanupMediaListener: (() => void) | undefined;
@@ -250,7 +268,12 @@ export function OverlayEditor() {
   }, [activeNote?.id, setActiveNoteId]);
 
   useEffect(() => {
-    const selectableNotes = selectedSidebarItem === "trash" ? trashedNotes : notes;
+    const selectableNotes =
+      selectedSidebarItem === "trash"
+        ? trashedNotes
+        : selectedSidebarItem === "archive"
+          ? archivedNotes
+          : notes;
     if (selectableNotes.length === 0) {
       setSelectedHistoryNoteId(null);
       return;
@@ -259,7 +282,22 @@ export function OverlayEditor() {
     if (!selectedHistoryNoteId || !selectableNotes.some((note) => note.id === selectedHistoryNoteId)) {
       setSelectedHistoryNoteId(selectableNotes[0]?.id ?? null);
     }
-  }, [notes, selectedHistoryNoteId, selectedSidebarItem, setSelectedHistoryNoteId, trashedNotes]);
+  }, [archivedNotes, notes, selectedHistoryNoteId, selectedSidebarItem, setSelectedHistoryNoteId, trashedNotes]);
+
+  useEffect(() => {
+    if (!folderPanelOpen) {
+      return;
+    }
+
+    const handleMouseDown = (event: globalThis.MouseEvent) => {
+      if (folderPanelRef.current && !folderPanelRef.current.contains(event.target as Node)) {
+        setFolderPanelOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [folderPanelOpen]);
 
   useEffect(() => {
     if (selectedSidebarItem === "folders" && selectedFolderId) {
@@ -267,66 +305,17 @@ export function OverlayEditor() {
     }
   }, [loadNotesByFolder, selectedFolderId, selectedSidebarItem]);
 
-  const handleCursorChange = () => {
-    setLastCursorPosition(textareaRef.current?.selectionStart ?? 0);
-  };
-
-  const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    setDraftContent(event.target.value);
-    setLastCursorPosition(event.target.selectionStart);
-  };
-
   const moveToBodyStart = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (!textarea || draftContent.includes("\n") || draftContent.length === 0) {
+    if (draftContent.includes("\n") || draftContent.length === 0) {
       return false;
     }
 
     const nextContent = `${draftContent}\n\n`;
     setDraftContent(nextContent);
     setLastCursorPosition(nextContent.length);
-    window.requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(nextContent.length, nextContent.length);
-    });
+    window.requestAnimationFrame(() => focusNoteEditor(editorViewRef.current, nextContent.length));
     return true;
   }, [draftContent, setDraftContent, setLastCursorPosition]);
-
-  const handleEditorMouseDown = (event: MouseEvent<HTMLTextAreaElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    const textarea = event.currentTarget;
-    const style = window.getComputedStyle(textarea);
-    const lineHeight = Number.parseFloat(style.lineHeight) || 24;
-    const clickedLine = Math.max(
-      0,
-      Math.floor((event.clientY - textarea.getBoundingClientRect().top + textarea.scrollTop) / lineHeight)
-    );
-    const currentLineCount = textarea.value.split("\n").length;
-    if (clickedLine >= currentLineCount) {
-      const missingLines = clickedLine - currentLineCount + 1;
-      const nextContent = `${draftContent}${"\n".repeat(missingLines)}`;
-      setDraftContent(nextContent);
-      setLastCursorPosition(nextContent.length);
-      window.requestAnimationFrame(() => {
-        textarea.focus();
-        textarea.setSelectionRange(nextContent.length, nextContent.length);
-      });
-      event.preventDefault();
-    }
-  };
-
-  const handleEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || draftContent.includes("\n")) {
-      return;
-    }
-
-    if (event.currentTarget.selectionStart === draftContent.length && moveToBodyStart()) {
-      event.preventDefault();
-    }
-  };
 
   const handleShortcutFallback = (accelerator: string) => {
     void (async () => {
@@ -358,6 +347,7 @@ export function OverlayEditor() {
       return;
     }
     setNewFolderName("");
+    setFolderPanelOpen(false);
     await toggleActiveNoteFolder(folder.id);
     window.requestAnimationFrame(focusEditor);
   }, [createFolder, focusEditor, newFolderName, toggleActiveNoteFolder]);
@@ -372,20 +362,37 @@ export function OverlayEditor() {
   }, [createFolder, dashboardFolderName, loadNotesByFolder]);
 
   const selectedHistoryNote = notes.find((note) => note.id === selectedHistoryNoteId) ?? null;
+  const selectedArchivedNote = archivedNotes.find((note) => note.id === selectedHistoryNoteId) ?? null;
   const selectedTrashedNote = trashedNotes.find((note) => note.id === selectedHistoryNoteId) ?? null;
   const activeFolders = activeNote?.folders ?? [];
   const activeFolderIds = new Set(activeFolders.map((folder) => folder.id));
   const selectedFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null;
 
-  const openNoteInEditor = useCallback(() => {
-    if (!selectedHistoryNote) {
+  const openNoteInEditor = useCallback(
+    (note: Note) => {
+      if (saveStatus === "dirty") {
+        setPendingOpenNote(note);
+        return;
+      }
+
+      setActiveNote(note);
+      setViewMode("editor");
+      window.requestAnimationFrame(focusEditor);
+    },
+    [focusEditor, saveStatus, setActiveNote, setViewMode]
+  );
+
+  const confirmDiscardAndOpen = useCallback(() => {
+    if (!pendingOpenNote) {
       return;
     }
 
-    useNoteStore.getState().setActiveNote(selectedHistoryNote);
+    resetDraft();
+    setActiveNote(pendingOpenNote);
+    setPendingOpenNote(null);
     setViewMode("editor");
     window.requestAnimationFrame(focusEditor);
-  }, [focusEditor, selectedHistoryNote, setViewMode]);
+  }, [focusEditor, pendingOpenNote, resetDraft, setActiveNote, setViewMode]);
 
   const moveSelectedNoteToTrash = useCallback(async () => {
     if (!selectedHistoryNote) {
@@ -408,19 +415,13 @@ export function OverlayEditor() {
           </header>
 
           <div className="relative min-h-0 flex-1">
-            <textarea
-              ref={textareaRef}
+            <NoteEditor
               value={draftContent}
-              placeholder="Title"
-              spellCheck
-              onChange={handleChange}
-              onBlur={() => void flushSave()}
-              onMouseDown={handleEditorMouseDown}
-              onKeyDown={handleEditorKeyDown}
-              onClick={handleCursorChange}
-              onKeyUp={handleCursorChange}
-              onSelect={handleCursorChange}
-              className="h-full min-h-0 w-full resize-none border-0 bg-transparent bg-[linear-gradient(to_right,#c9d5c5,#c9d5c5)] bg-[length:100%_1px] bg-[position:0_1.5rem] bg-no-repeat text-[15px] leading-6 text-[#172116] outline-none placeholder:text-[#8a9587] dark:bg-[linear-gradient(to_right,#3d4939,#3d4939)] dark:text-[#ecf3ea] dark:placeholder:text-[#788475]"
+              onChange={setDraftContent}
+              onCursorChange={setLastCursorPosition}
+              editorViewRef={editorViewRef}
+              showTitleUnderline={!draftContent.includes("\n")}
+              onEnterAtEndOfTitle={moveToBodyStart}
             />
           </div>
 
@@ -463,18 +464,18 @@ export function OverlayEditor() {
                   </button>
                 );
               })}
-              <button
-                type="button"
-                aria-label="Create folder"
-                onMouseDown={(event) => handleMouseDownAction(event, () => setFolderPanelOpen((open) => !open))}
-                onClick={(event) => event.preventDefault()}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#dce5d8] text-[#2f6b43] hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
-              >
-                <Plus size={14} aria-hidden="true" />
-              </button>
-            </div>
-            {folderPanelOpen ? (
-              <div className="absolute bottom-9 left-0 z-10 w-60 rounded-md border border-[#dce5d8] bg-[#fbfdfb] p-2 shadow-lg dark:border-[#2c3628] dark:bg-[#141b12]">
+              <div ref={folderPanelRef} className="relative shrink-0">
+                <button
+                  type="button"
+                  aria-label="Create folder"
+                  onMouseDown={(event) => handleMouseDownAction(event, () => setFolderPanelOpen((open) => !open))}
+                  onClick={(event) => event.preventDefault()}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#dce5d8] text-[#2f6b43] hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
+                >
+                  <Plus size={14} aria-hidden="true" />
+                </button>
+                {folderPanelOpen ? (
+                  <div className="absolute bottom-9 left-0 z-10 w-60 rounded-md border border-[#dce5d8] bg-[#fbfdfb] p-2 shadow-lg dark:border-[#2c3628] dark:bg-[#141b12]">
                 <div className="flex items-center gap-1">
                   <input
                     value={newFolderName}
@@ -501,9 +502,11 @@ export function OverlayEditor() {
                   >
                     <Plus size={14} aria-hidden="true" />
                   </button>
+                  </div>
                 </div>
+                ) : null}
               </div>
-            ) : null}
+            </div>
           </div>
 
           <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#dce5d8] pt-2 dark:border-[#2c3628]">
@@ -543,13 +546,11 @@ export function OverlayEditor() {
                 type="button"
                 onMouseDown={(event) =>
                   handleMouseDownAction(event, () => {
-                    resetDraft();
                     setViewMode("editor");
                     window.requestAnimationFrame(focusEditor);
                   })
                 }
                 onClick={() => {
-                  resetDraft();
                   setViewMode("editor");
                   window.requestAnimationFrame(focusEditor);
                 }}
@@ -589,7 +590,31 @@ export function OverlayEditor() {
             </button>
             <button
               type="button"
+              aria-pressed={selectedSidebarItem === "archive"}
+              onMouseDown={(event) =>
+                handleMouseDownAction(event, () => {
+                  setSelectedSidebarItem("archive");
+                  void loadArchivedNotes(1000);
+                })
+              }
+              onClick={() => {
+                setSelectedSidebarItem("archive");
+                void loadArchivedNotes(1000);
+              }}
+              className="mt-1 flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[#253022] transition hover:bg-[#e5eee1] aria-pressed:bg-[#dce8d8] dark:text-[#e2eadf] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#263220]"
+            >
+              <Archive size={16} aria-hidden="true" />
+              Archive
+            </button>
+            <button
+              type="button"
               aria-pressed={selectedSidebarItem === "trash"}
+              onMouseDown={(event) =>
+                handleMouseDownAction(event, () => {
+                  setSelectedSidebarItem("trash");
+                  void loadTrashedNotes(1000);
+                })
+              }
               onClick={() => {
                 setSelectedSidebarItem("trash");
                 void loadTrashedNotes(1000);
@@ -609,6 +634,7 @@ export function OverlayEditor() {
                     <NoteHistory
                       selectedNoteId={selectedHistoryNoteId}
                       onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                      onOpenNote={openNoteInEditor}
                     />
                   </div>
                   <article className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-4 dark:border-[#2c3628] dark:bg-[#141b12]">
@@ -621,13 +647,16 @@ export function OverlayEditor() {
                         <h2 className="mb-3 text-lg font-semibold text-[#253022] dark:text-[#e2eadf]">
                           {previewContent(selectedHistoryNote.content)}
                         </h2>
-                        <div className="flex-1 whitespace-pre-wrap text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
-                          {selectedHistoryNote.content}
+                        <div className="flex-1 text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
+                          {previewContent(selectedHistoryNote.content)}
                         </div>
                         <div className="mt-4 flex items-center gap-2 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
                           <button
                             type="button"
-                            onClick={openNoteInEditor}
+                            onMouseDown={(event) =>
+                              handleMouseDownAction(event, () => openNoteInEditor(selectedHistoryNote))
+                            }
+                            onClick={() => openNoteInEditor(selectedHistoryNote)}
                             aria-label="Edit note"
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
                           >
@@ -635,7 +664,45 @@ export function OverlayEditor() {
                           </button>
                           <button
                             type="button"
+                            aria-label="Archive note"
+                            onMouseDown={(event) =>
+                              handleMouseDownAction(event, () => {
+                                if (confirmArchiveNoteId === selectedHistoryNote.id) {
+                                  void archiveNote(selectedHistoryNote.id).then(() => {
+                                    setConfirmArchiveNoteId(null);
+                                    setSelectedHistoryNoteId(null);
+                                  });
+                                } else {
+                                  setConfirmArchiveNoteId(selectedHistoryNote.id);
+                                }
+                              })
+                            }
+                            onClick={() => {
+                              if (confirmArchiveNoteId === selectedHistoryNote.id) {
+                                void archiveNote(selectedHistoryNote.id).then(() => {
+                                  setConfirmArchiveNoteId(null);
+                                  setSelectedHistoryNoteId(null);
+                                });
+                              } else {
+                                setConfirmArchiveNoteId(selectedHistoryNote.id);
+                              }
+                            }}
+                            className="inline-flex h-8 items-center justify-center rounded-md px-2 text-xs font-medium text-[#536150] transition hover:bg-[#eef4ec] dark:text-[#b8c7b4] dark:hover:bg-[#202a1d]"
+                          >
+                            {confirmArchiveNoteId === selectedHistoryNote.id ? "Archive?" : <Archive size={15} />}
+                          </button>
+                          <button
+                            type="button"
                             aria-label="Delete note"
+                            onMouseDown={(event) =>
+                              handleMouseDownAction(event, () => {
+                                if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
+                                  void moveSelectedNoteToTrash();
+                                } else {
+                                  setConfirmSoftDeleteNoteId(selectedHistoryNote.id);
+                                }
+                              })
+                            }
                             onClick={() => {
                               if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
                                 void moveSelectedNoteToTrash();
@@ -744,6 +811,7 @@ export function OverlayEditor() {
                         <NoteHistory
                           selectedNoteId={selectedHistoryNoteId}
                           onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                          onOpenNote={openNoteInEditor}
                           notesOverride={notes}
                           title={selectedFolder.name}
                         />
@@ -757,14 +825,55 @@ export function OverlayEditor() {
                                 <button
                                   type="button"
                                   aria-label="Edit note"
-                                  onClick={openNoteInEditor}
+                                  onMouseDown={(event) =>
+                                    handleMouseDownAction(event, () => openNoteInEditor(selectedHistoryNote))
+                                  }
+                                  onClick={() => openNoteInEditor(selectedHistoryNote)}
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
                                 >
                                   <PenSquare size={14} aria-hidden="true" />
                                 </button>
                                 <button
                                   type="button"
+                                  aria-label="Archive note"
+                                  onMouseDown={(event) =>
+                                    handleMouseDownAction(event, () => {
+                                      if (confirmArchiveNoteId === selectedHistoryNote.id) {
+                                        void archiveNote(selectedHistoryNote.id).then(() => {
+                                          setConfirmArchiveNoteId(null);
+                                          setSelectedHistoryNoteId(null);
+                                        });
+                                      } else {
+                                        setConfirmArchiveNoteId(selectedHistoryNote.id);
+                                      }
+                                    })
+                                  }
+                                  onClick={() => {
+                                    if (confirmArchiveNoteId === selectedHistoryNote.id) {
+                                      void archiveNote(selectedHistoryNote.id).then(() => {
+                                        setConfirmArchiveNoteId(null);
+                                        setSelectedHistoryNoteId(null);
+                                      });
+                                    } else {
+                                      setConfirmArchiveNoteId(selectedHistoryNote.id);
+                                    }
+                                  }}
+                                  className="inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium text-[#536150] hover:bg-[#eef4ec] dark:text-[#b8c7b4] dark:hover:bg-[#202a1d]"
+                                >
+                                  {confirmArchiveNoteId === selectedHistoryNote.id ? "Archive?" : <Archive size={14} />}
+                                </button>
+                                <button
+                                  type="button"
                                   aria-label="Delete note"
+                                  onMouseDown={(event) =>
+                                    handleMouseDownAction(event, () => {
+                                      if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
+                                        void moveSelectedNoteToTrash();
+                                      } else {
+                                        setConfirmSoftDeleteNoteId(selectedHistoryNote.id);
+                                      }
+                                    })
+                                  }
                                   onClick={() => {
                                     if (confirmSoftDeleteNoteId === selectedHistoryNote.id) {
                                       void moveSelectedNoteToTrash();
@@ -778,8 +887,8 @@ export function OverlayEditor() {
                                 </button>
                               </span>
                             </div>
-                            <div className="min-w-0 whitespace-pre-wrap text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
-                              {selectedHistoryNote.content}
+                            <div className="min-w-0 text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
+                              {previewContent(selectedHistoryNote.content)}
                             </div>
                           </div>
                         ) : null}
@@ -797,6 +906,100 @@ export function OverlayEditor() {
                 </article>
               </div>
             ) : null}
+            {selectedSidebarItem === "archive" ? (
+              archivedNotes.length > 0 ? (
+                <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[280px_1fr]">
+                  <div className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-3 dark:border-[#2c3628] dark:bg-[#141b12]">
+                    <NoteHistory
+                      selectedNoteId={selectedHistoryNoteId}
+                      onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                      onOpenNote={openNoteInEditor}
+                      notesOverride={archivedNotes}
+                      title="Archive"
+                      emptyTitle="Archive is empty"
+                      ariaLabel="Archived notes"
+                    />
+                  </div>
+                  <article className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-4 dark:border-[#2c3628] dark:bg-[#141b12]">
+                    {selectedArchivedNote ? (
+                      <div className="flex h-full flex-col">
+                        <div className="mb-3 text-xs uppercase tracking-[0.16em] text-[#657064] dark:text-[#aeb9aa]">
+                          Archived{" "}
+                          {dayjs(selectedArchivedNote.archived_at ?? selectedArchivedNote.updated_at).format(
+                            "MMM D, YYYY h:mm A"
+                          )}
+                        </div>
+                        <h2 className="mb-3 text-lg font-semibold text-[#253022] dark:text-[#e2eadf]">
+                          {previewContent(selectedArchivedNote.content)}
+                        </h2>
+                        <div className="flex-1 text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
+                          {previewContent(selectedArchivedNote.content)}
+                        </div>
+                        <div className="mt-4 flex items-center gap-2 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
+                          <button
+                            type="button"
+                            aria-label="Unarchive note"
+                            onMouseDown={(event) =>
+                              handleMouseDownAction(event, () =>
+                                void unarchiveNote(selectedArchivedNote.id).then(() => setSelectedHistoryNoteId(null))
+                              )
+                            }
+                            onClick={() =>
+                              void unarchiveNote(selectedArchivedNote.id).then(() => setSelectedHistoryNoteId(null))
+                            }
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
+                          >
+                            <ArchiveRestore size={15} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Edit note"
+                            onMouseDown={(event) =>
+                              handleMouseDownAction(event, () => openNoteInEditor(selectedArchivedNote))
+                            }
+                            onClick={() => openNoteInEditor(selectedArchivedNote)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#dce5d8] text-[#2f6b43] transition hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
+                          >
+                            <PenSquare size={15} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Delete note"
+                            onMouseDown={(event) =>
+                              handleMouseDownAction(event, () => {
+                                if (confirmSoftDeleteNoteId === selectedArchivedNote.id) {
+                                  void softDeleteNote(selectedArchivedNote.id).then(() =>
+                                    setSelectedHistoryNoteId(null)
+                                  );
+                                  setConfirmSoftDeleteNoteId(null);
+                                } else {
+                                  setConfirmSoftDeleteNoteId(selectedArchivedNote.id);
+                                }
+                              })
+                            }
+                            onClick={() => {
+                              if (confirmSoftDeleteNoteId === selectedArchivedNote.id) {
+                                void softDeleteNote(selectedArchivedNote.id).then(() => setSelectedHistoryNoteId(null));
+                                setConfirmSoftDeleteNoteId(null);
+                              } else {
+                                setConfirmSoftDeleteNoteId(selectedArchivedNote.id);
+                              }
+                            }}
+                            className="inline-flex h-8 items-center justify-center rounded-md px-2 text-xs font-medium text-[#8a3d2b] transition hover:bg-[#fae9e4] dark:text-[#f0a394] dark:hover:bg-[#2a1b18]"
+                          >
+                            {confirmSoftDeleteNoteId === selectedArchivedNote.id ? "Delete?" : <Trash2 size={15} />}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-[#dce5d8] bg-[#fbfdfb] text-sm text-[#657064] dark:border-[#2c3628] dark:bg-[#141b12] dark:text-[#aeb9aa]">
+                  Archive is empty
+                </div>
+              )
+            ) : null}
             {selectedSidebarItem === "trash" ? (
               trashedNotes.length > 0 ? (
                 <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[280px_1fr]">
@@ -804,12 +1007,12 @@ export function OverlayEditor() {
                     <NoteHistory
                       selectedNoteId={selectedHistoryNoteId}
                       onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                      onOpenNote={openNoteInEditor}
                       notesOverride={trashedNotes}
                       title="Trash"
                       emptyTitle="Trash is empty"
                       timestampField="deleted_at"
                       ariaLabel="Trashed notes"
-                      maxVisible={1000}
                     />
                   </div>
                   <article className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-4 dark:border-[#2c3628] dark:bg-[#141b12]">
@@ -824,8 +1027,8 @@ export function OverlayEditor() {
                         <h2 className="mb-3 text-lg font-semibold text-[#253022] dark:text-[#e2eadf]">
                           {previewContent(selectedTrashedNote.content)}
                         </h2>
-                        <div className="flex-1 whitespace-pre-wrap text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
-                          {selectedTrashedNote.content}
+                        <div className="flex-1 text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
+                          {previewContent(selectedTrashedNote.content)}
                         </div>
                         <div className="mt-4 flex items-center gap-2 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
                           <button
@@ -867,6 +1070,30 @@ export function OverlayEditor() {
           </div>
         </section>
       )}
+
+      {pendingOpenNote ? (
+        <div className="absolute inset-x-4 bottom-4 z-20 rounded-md border border-[#dce5d8] bg-[#fbfdfb] px-3 py-2 text-sm shadow-lg dark:border-[#2c3628] dark:bg-[#141b12]">
+          <div className="mb-2 text-[#253022] dark:text-[#e2eadf]">Discard unsaved note?</div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onMouseDown={(event) => handleMouseDownAction(event, confirmDiscardAndOpen)}
+              onClick={confirmDiscardAndOpen}
+              className="rounded-md bg-[#2f6b43] px-2.5 py-1 text-xs font-medium text-white"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onMouseDown={(event) => handleMouseDownAction(event, () => setPendingOpenNote(null))}
+              onClick={() => setPendingOpenNote(null)}
+              className="rounded-md border border-[#dce5d8] px-2.5 py-1 text-xs font-medium dark:border-[#2c3628]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {saveError ? <Toast message={saveError} /> : null}
     </main>

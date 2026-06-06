@@ -117,6 +117,24 @@ pub fn list_trashed_notes(
 }
 
 #[tauri::command]
+pub fn archive_note(database: tauri::State<Database>, id: String) -> Result<NoteDto, AppError> {
+    database.archive_note(id)
+}
+
+#[tauri::command]
+pub fn unarchive_note(database: tauri::State<Database>, id: String) -> Result<NoteDto, AppError> {
+    database.unarchive_note(id)
+}
+
+#[tauri::command]
+pub fn list_archived_notes(
+    database: tauri::State<Database>,
+    limit: Option<u32>,
+) -> Result<Vec<NoteDto>, AppError> {
+    database.list_archived_notes(limit)
+}
+
+#[tauri::command]
 pub fn get_trashed_note(
     database: tauri::State<Database>,
     id: String,

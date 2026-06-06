@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { ThemePreference } from "../types/note";
 
 export type ViewMode = "editor" | "home";
-export type SidebarItem = "recent" | "folders" | "trash";
+export type SidebarItem = "recent" | "folders" | "archive" | "trash";
 
 type UiState = {
   isOverlayVisible: boolean;

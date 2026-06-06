@@ -73,6 +73,18 @@ export function listTrashedNotes(limit?: number): Promise<Note[]> {
   return invoke<Note[]>("list_trashed_notes", { limit });
 }
 
+export function archiveNote(id: string): Promise<Note> {
+  return invoke<Note>("archive_note", { id });
+}
+
+export function unarchiveNote(id: string): Promise<Note> {
+  return invoke<Note>("unarchive_note", { id });
+}
+
+export function listArchivedNotes(limit?: number): Promise<Note[]> {
+  return invoke<Note[]>("list_archived_notes", { limit });
+}
+
 export function getTrashedNote(id: string): Promise<Note | null> {
   return invoke<Note | null>("get_trashed_note", { id });
 }

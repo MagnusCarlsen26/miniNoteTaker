@@ -53,6 +53,7 @@ pub struct NoteDto {
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -131,9 +132,9 @@ impl Database {
         let limit = limit.unwrap_or(1000).min(1000);
         let connection = self.lock_connection();
         let mut statement = connection.prepare(
-            "SELECT id, content, pinned, created_at, updated_at, deleted_at
+            "SELECT id, content, pinned, created_at, updated_at, deleted_at, archived_at
              FROM notes
-             WHERE deleted_at IS NULL
+             WHERE deleted_at IS NULL AND archived_at IS NULL
              ORDER BY pinned DESC, updated_at DESC
              LIMIT ?1",
         )?;
@@ -150,9 +151,83 @@ impl Database {
         let connection = self.lock_connection();
         let note = connection
             .query_row(
-                "SELECT id, content, pinned, created_at, updated_at, deleted_at
+                "SELECT id, content, pinned, created_at, updated_at, deleted_at, archived_at
                  FROM notes
-                 WHERE id = ?1 AND deleted_at IS NULL",
+                 WHERE id = ?1 AND deleted_at IS NULL AND archived_at IS NULL",
+                params![id],
+                note_from_row,
+            )
+            .optional()
+            .map_err(AppError::from)?;
+
+        match note {
+            Some(note) => Ok(hydrate_note_folders(&connection, vec![note])?.pop()),
+            None => Ok(None),
+        }
+    }
+
+    pub fn archive_note(&self, id: String) -> Result<NoteDto, AppError> {
+        let now = now_timestamp();
+        let connection = self.lock_connection();
+        let affected = connection.execute(
+            "UPDATE notes
+             SET archived_at = ?1, updated_at = ?1, pinned = 0
+             WHERE id = ?2 AND deleted_at IS NULL AND archived_at IS NULL",
+            params![now, id],
+        )?;
+
+        if affected == 0 {
+            return Err(AppError::NoteNotFound);
+        }
+        drop(connection);
+
+        self.get_archived_note(id)?.ok_or(AppError::NoteNotFound)
+    }
+
+    pub fn unarchive_note(&self, id: String) -> Result<NoteDto, AppError> {
+        let now = now_timestamp();
+        let connection = self.lock_connection();
+        let affected = connection.execute(
+            "UPDATE notes
+             SET archived_at = NULL, updated_at = ?1
+             WHERE id = ?2 AND deleted_at IS NULL AND archived_at IS NOT NULL",
+            params![now, id],
+        )?;
+
+        if affected == 0 {
+            return Err(AppError::NoteNotFound);
+        }
+        drop(connection);
+
+        self.get_note(id)?.ok_or(AppError::NoteNotFound)
+    }
+
+    pub fn list_archived_notes(&self, limit: Option<u32>) -> Result<Vec<NoteDto>, AppError> {
+        let limit = limit.unwrap_or(1000).min(1000);
+        let connection = self.lock_connection();
+        let mut statement = connection.prepare(
+            "SELECT id, content, pinned, created_at, updated_at, deleted_at, archived_at
+             FROM notes
+             WHERE deleted_at IS NULL AND archived_at IS NOT NULL
+             ORDER BY archived_at DESC
+             LIMIT ?1",
+        )?;
+
+        let notes = statement
+            .query_map(params![limit], note_from_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(statement);
+
+        hydrate_note_folders(&connection, notes)
+    }
+
+    pub fn get_archived_note(&self, id: String) -> Result<Option<NoteDto>, AppError> {
+        let connection = self.lock_connection();
+        let note = connection
+            .query_row(
+                "SELECT id, content, pinned, created_at, updated_at, deleted_at, archived_at
+                 FROM notes
+                 WHERE id = ?1 AND deleted_at IS NULL AND archived_at IS NOT NULL",
                 params![id],
                 note_from_row,
             )
@@ -237,7 +312,7 @@ impl Database {
         let limit = limit.unwrap_or(1000).min(1000);
         let connection = self.lock_connection();
         let mut statement = connection.prepare(
-            "SELECT id, content, pinned, created_at, updated_at, deleted_at
+            "SELECT id, content, pinned, created_at, updated_at, deleted_at, archived_at
              FROM notes
              WHERE deleted_at IS NOT NULL
              ORDER BY deleted_at DESC
@@ -256,7 +331,7 @@ impl Database {
         let connection = self.lock_connection();
         let note = connection
             .query_row(
-                "SELECT id, content, pinned, created_at, updated_at, deleted_at
+                "SELECT id, content, pinned, created_at, updated_at, deleted_at, archived_at
                  FROM notes
                  WHERE id = ?1 AND deleted_at IS NOT NULL",
                 params![id],
@@ -300,7 +375,7 @@ impl Database {
                     "SELECT f.id, f.name, COUNT(n.id) AS note_count, f.created_at, f.updated_at
                      FROM folders f
                      LEFT JOIN note_folders nf ON nf.folder_id = f.id
-                     LEFT JOIN notes n ON n.id = nf.note_id AND n.deleted_at IS NULL
+                     LEFT JOIN notes n ON n.id = nf.note_id AND n.deleted_at IS NULL AND n.archived_at IS NULL
                      WHERE f.name = ?1 COLLATE NOCASE
                      GROUP BY f.id",
                     params![name],
@@ -319,7 +394,7 @@ impl Database {
             "SELECT f.id, f.name, COUNT(n.id) AS note_count, f.created_at, f.updated_at
              FROM folders f
              LEFT JOIN note_folders nf ON nf.folder_id = f.id
-             LEFT JOIN notes n ON n.id = nf.note_id AND n.deleted_at IS NULL
+             LEFT JOIN notes n ON n.id = nf.note_id AND n.deleted_at IS NULL AND n.archived_at IS NULL
              GROUP BY f.id
              ORDER BY f.updated_at DESC",
         )?;
@@ -344,7 +419,7 @@ impl Database {
                 "SELECT n.id
                  FROM notes n
                  INNER JOIN note_folders nf ON nf.note_id = n.id
-                 WHERE nf.folder_id = ?1 AND n.deleted_at IS NULL",
+                 WHERE nf.folder_id = ?1 AND n.deleted_at IS NULL AND n.archived_at IS NULL",
             )?;
             let note_ids = statement
                 .query_map(params![id], |row| row.get::<_, String>(0))?
@@ -378,10 +453,10 @@ impl Database {
         }
 
         let mut statement = connection.prepare(
-            "SELECT n.id, n.content, n.pinned, n.created_at, n.updated_at, n.deleted_at
+            "SELECT n.id, n.content, n.pinned, n.created_at, n.updated_at, n.deleted_at, n.archived_at
              FROM notes n
              INNER JOIN note_folders nf ON nf.note_id = n.id
-             WHERE nf.folder_id = ?1 AND n.deleted_at IS NULL
+             WHERE nf.folder_id = ?1 AND n.deleted_at IS NULL AND n.archived_at IS NULL
              ORDER BY n.pinned DESC, n.updated_at DESC
              LIMIT ?2",
         )?;
@@ -513,9 +588,9 @@ impl Database {
     ) -> Result<Option<NoteDto>, AppError> {
         connection
             .query_row(
-                "SELECT id, content, pinned, created_at, updated_at, deleted_at
+                "SELECT id, content, pinned, created_at, updated_at, deleted_at, archived_at
                  FROM notes
-                 WHERE id = ?1 AND deleted_at IS NULL",
+                 WHERE id = ?1 AND deleted_at IS NULL AND archived_at IS NULL",
                 params![id],
                 note_from_row,
             )
@@ -533,7 +608,7 @@ impl Database {
                 "SELECT f.id, f.name, COUNT(n.id) AS note_count, f.created_at, f.updated_at
                  FROM folders f
                  LEFT JOIN note_folders nf ON nf.folder_id = f.id
-                 LEFT JOIN notes n ON n.id = nf.note_id AND n.deleted_at IS NULL
+                 LEFT JOIN notes n ON n.id = nf.note_id AND n.deleted_at IS NULL AND n.archived_at IS NULL
                  WHERE f.id = ?1
                  GROUP BY f.id",
                 params![id],
@@ -601,6 +676,7 @@ fn initialize_connection(connection: &Connection) -> Result<(), AppError> {
     )?;
 
     migrate_deleted_at(connection)?;
+    migrate_archived_at(connection)?;
 
     Ok(())
 }
@@ -626,6 +702,27 @@ fn migrate_deleted_at(connection: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+fn migrate_archived_at(connection: &Connection) -> Result<(), AppError> {
+    let has_archived_at = {
+        let mut statement = connection.prepare("PRAGMA table_info(notes)")?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        columns.iter().any(|column| column == "archived_at")
+    };
+
+    if !has_archived_at {
+        connection.execute("ALTER TABLE notes ADD COLUMN archived_at TEXT", [])?;
+    }
+
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_notes_archived_at ON notes(archived_at DESC)",
+        [],
+    )?;
+
+    Ok(())
+}
+
 fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteDto> {
     Ok(NoteDto {
         id: row.get(0)?,
@@ -635,6 +732,7 @@ fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteDto> {
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
         deleted_at: row.get(5)?,
+        archived_at: row.get(6)?,
     })
 }
 
@@ -683,7 +781,7 @@ fn hydrate_note_folders(
              FROM folders f
              INNER JOIN note_folders nf ON nf.folder_id = f.id
              LEFT JOIN note_folders all_nf ON all_nf.folder_id = f.id
-             LEFT JOIN notes all_notes ON all_notes.id = all_nf.note_id AND all_notes.deleted_at IS NULL
+             LEFT JOIN notes all_notes ON all_notes.id = all_nf.note_id AND all_notes.deleted_at IS NULL AND all_notes.archived_at IS NULL
              WHERE nf.note_id = ?1
              GROUP BY f.id
              ORDER BY f.name COLLATE NOCASE ASC",
@@ -1123,5 +1221,82 @@ mod tests {
         let result = database.delete_folder("missing".to_string());
 
         assert!(matches!(result, Err(AppError::FolderNotFound)));
+    }
+
+    #[test]
+    fn archive_note_hides_note_from_recent_lists() {
+        let database = Database::new_in_memory().unwrap();
+        let note = database.create_note("archive me".to_string()).unwrap();
+        database.set_pinned(note.id.clone(), true).unwrap();
+
+        let archived = database.archive_note(note.id.clone()).unwrap();
+
+        assert!(archived.archived_at.is_some());
+        assert!(!archived.pinned);
+        assert!(database.list_notes(None).unwrap().is_empty());
+        assert_eq!(database.list_archived_notes(None).unwrap()[0].id, note.id);
+        assert!(database.get_note(note.id.clone()).unwrap().is_none());
+    }
+
+    #[test]
+    fn unarchive_note_restores_note_to_recent_lists() {
+        let database = Database::new_in_memory().unwrap();
+        let note = database.create_note("restore archive".to_string()).unwrap();
+        database.archive_note(note.id.clone()).unwrap();
+
+        let restored = database.unarchive_note(note.id.clone()).unwrap();
+
+        assert!(restored.archived_at.is_none());
+        assert_eq!(database.list_notes(None).unwrap()[0].id, note.id);
+        assert!(database.list_archived_notes(None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn list_notes_by_folder_excludes_archived_notes() {
+        let database = Database::new_in_memory().unwrap();
+        let note = database.create_note("filed".to_string()).unwrap();
+        let folder = database.create_folder("Work".to_string()).unwrap();
+        database
+            .set_note_folders(note.id.clone(), vec![folder.id.clone()])
+            .unwrap();
+
+        database.archive_note(note.id).unwrap();
+
+        assert_eq!(database.list_folders().unwrap()[0].note_count, 0);
+        assert!(database
+            .list_notes_by_folder(folder.id, None)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn initialize_connection_migrates_archived_at_column() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE notes (
+                  id TEXT PRIMARY KEY,
+                  content TEXT NOT NULL,
+                  pinned INTEGER NOT NULL DEFAULT 0,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL,
+                  deleted_at TEXT
+                );
+                ",
+            )
+            .unwrap();
+
+        initialize_connection(&connection).unwrap();
+
+        let columns = {
+            let mut statement = connection.prepare("PRAGMA table_info(notes)").unwrap();
+            statement
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        assert!(columns.iter().any(|column| column == "archived_at"));
     }
 }
