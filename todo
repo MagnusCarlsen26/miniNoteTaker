@@ -4,6 +4,7 @@
 - [ ] Increase ui size when seeing dashboard
 
 # Next
+- [ ] Use and Archive notes
 - [ ] Deadline to comeplete/remind.
 - [ ] Pasting Image/ PDF.
 - [ ] First line is title. Just indicate that by long line in ui.
@@ -18,7 +19,6 @@
 - [ ] Hyperlink detection
 
 # Next Next
-- [ ] Use and Archive notes
 - [ ] Font size increase/decrease everywhere
 - [ ] Set Default size
 - [ ] Workspace

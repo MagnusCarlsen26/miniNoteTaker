@@ -171,7 +171,7 @@ impl Database {
         let connection = self.lock_connection();
         let affected = connection.execute(
             "UPDATE notes
-             SET archived_at = ?1, updated_at = ?1, pinned = 0
+             SET archived_at = ?1, pinned = 0
              WHERE id = ?2 AND deleted_at IS NULL AND archived_at IS NULL",
             params![now, id],
         )?;
@@ -185,13 +185,12 @@ impl Database {
     }
 
     pub fn unarchive_note(&self, id: String) -> Result<NoteDto, AppError> {
-        let now = now_timestamp();
         let connection = self.lock_connection();
         let affected = connection.execute(
             "UPDATE notes
-             SET archived_at = NULL, updated_at = ?1
-             WHERE id = ?2 AND deleted_at IS NULL AND archived_at IS NOT NULL",
-            params![now, id],
+             SET archived_at = NULL
+             WHERE id = ?1 AND deleted_at IS NULL AND archived_at IS NOT NULL",
+            params![id],
         )?;
 
         if affected == 0 {
@@ -263,7 +262,7 @@ impl Database {
         let connection = self.lock_connection();
         let affected = connection.execute(
             "UPDATE notes
-             SET deleted_at = ?1, updated_at = ?1, pinned = 0
+             SET deleted_at = ?1, pinned = 0
              WHERE id = ?2 AND deleted_at IS NULL",
             params![now, id],
         )?;
@@ -276,13 +275,12 @@ impl Database {
     }
 
     pub fn restore_note(&self, id: String) -> Result<NoteDto, AppError> {
-        let now = now_timestamp();
         let connection = self.lock_connection();
         let affected = connection.execute(
             "UPDATE notes
-             SET deleted_at = NULL, updated_at = ?1
-             WHERE id = ?2 AND deleted_at IS NOT NULL",
-            params![now, id],
+             SET deleted_at = NULL
+             WHERE id = ?1 AND deleted_at IS NOT NULL",
+            params![id],
         )?;
 
         if affected == 0 {
@@ -431,7 +429,7 @@ impl Database {
             let now = now_timestamp();
             transaction.execute(
                 "UPDATE notes
-                 SET deleted_at = ?1, updated_at = ?1, pinned = 0
+                 SET deleted_at = ?1, pinned = 0
                  WHERE id = ?2 AND deleted_at IS NULL",
                 params![now, note_id],
             )?;
@@ -1007,6 +1005,8 @@ mod tests {
         let restored = database.restore_note(note.id.clone()).unwrap();
 
         assert_eq!(restored.id, note.id);
+        assert_eq!(restored.created_at, note.created_at);
+        assert_eq!(restored.updated_at, note.updated_at);
         assert_eq!(database.list_notes(None).unwrap()[0].id, note.id);
         assert!(database.list_trashed_notes(None).unwrap().is_empty());
     }
@@ -1282,8 +1282,44 @@ mod tests {
         let restored = database.unarchive_note(note.id.clone()).unwrap();
 
         assert!(restored.archived_at.is_none());
+        assert_eq!(restored.created_at, note.created_at);
+        assert_eq!(restored.updated_at, note.updated_at);
         assert_eq!(database.list_notes(None).unwrap()[0].id, note.id);
         assert!(database.list_archived_notes(None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn lifecycle_transitions_preserve_created_and_updated_at() {
+        let database = Database::new_in_memory().unwrap();
+        let note = database.create_note("lifecycle".to_string()).unwrap();
+        database
+            .set_created_at_for_test(&note.id, "2026-06-01T10:00:00Z")
+            .unwrap();
+        database
+            .set_updated_at_for_test(&note.id, "2026-06-01T12:00:00Z")
+            .unwrap();
+        let baseline = database.get_note(note.id.clone()).unwrap().unwrap();
+
+        database.soft_delete_note(note.id.clone()).unwrap();
+        let trashed = database.get_trashed_note(note.id.clone()).unwrap().unwrap();
+        assert_eq!(trashed.created_at, baseline.created_at);
+        assert_eq!(trashed.updated_at, baseline.updated_at);
+        assert!(trashed.deleted_at.is_some());
+
+        let restored = database.restore_note(note.id.clone()).unwrap();
+        assert_eq!(restored.created_at, baseline.created_at);
+        assert_eq!(restored.updated_at, baseline.updated_at);
+        assert!(restored.deleted_at.is_none());
+
+        let archived = database.archive_note(note.id.clone()).unwrap();
+        assert_eq!(archived.created_at, baseline.created_at);
+        assert_eq!(archived.updated_at, baseline.updated_at);
+        assert!(archived.archived_at.is_some());
+
+        let unarchived = database.unarchive_note(note.id.clone()).unwrap();
+        assert_eq!(unarchived.created_at, baseline.created_at);
+        assert_eq!(unarchived.updated_at, baseline.updated_at);
+        assert!(unarchived.archived_at.is_none());
     }
 
     #[test]
