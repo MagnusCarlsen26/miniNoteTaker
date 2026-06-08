@@ -1349,6 +1349,15 @@ mod tests {
             )?;
             Ok(())
         }
+
+        fn set_updated_at_for_test(&self, id: &str, updated_at: &str) -> Result<(), AppError> {
+            let connection = self.lock_connection();
+            connection.execute(
+                "UPDATE notes SET updated_at = ?1 WHERE id = ?2",
+                params![updated_at, id],
+            )?;
+            Ok(())
+        }
     }
 
     #[test]
