@@ -166,6 +166,16 @@ pub fn delete_folder(database: tauri::State<Database>, id: String) -> Result<(),
 }
 
 #[tauri::command]
+pub fn list_notes_by_created_date(
+    database: tauri::State<Database>,
+    start_iso: String,
+    end_iso: String,
+    limit: Option<u32>,
+) -> Result<Vec<NoteDto>, AppError> {
+    database.list_notes_by_created_date(start_iso, end_iso, limit)
+}
+
+#[tauri::command]
 pub fn list_notes_by_folder(
     database: tauri::State<Database>,
     folder_id: String,

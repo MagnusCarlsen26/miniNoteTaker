@@ -5,6 +5,7 @@ import dayjs from "dayjs";
 import {
   Archive,
   ArchiveRestore,
+  Calendar,
   Check,
   Folder,
   Home,
@@ -25,6 +26,7 @@ import {
   registerShortcut,
   saveWindowSize
 } from "../lib/tauri";
+import { formatSelectedDateHeader, noteCountsByDate } from "../lib/dates";
 import { previewContent } from "../lib/notePreview";
 import { shouldUseDarkTheme } from "../lib/theme";
 import { useAppShortcuts } from "../hooks/useAppShortcuts";
@@ -33,6 +35,9 @@ import { useNoteStore } from "../store/noteStore";
 import { useUiStore } from "../store/uiStore";
 import type { Note, SaveStatus, ThemePreference } from "../types/note";
 import { focusNoteEditor, getNoteEditorCursorPosition, NoteEditor } from "./NoteEditor";
+import { CalendarPicker } from "./CalendarPicker";
+import { DateStrip } from "./DateStrip";
+import { MonthCalendar } from "./MonthCalendar";
 import { NoteHistory } from "./NoteHistory";
 import { ShortcutHint } from "./ShortcutHint";
 import { Toast } from "./Toast";
@@ -67,15 +72,17 @@ function compactFolderName(name: string) {
   return trimmed.length > 6 ? `${trimmed.slice(0, 6)}...` : trimmed;
 }
 
-const EDITOR_WINDOW_SIZE = new LogicalSize(600, 400);
+const EDITOR_WINDOW_SIZE = new LogicalSize(660, 400);
 const DASHBOARD_WINDOW_SIZE = new LogicalSize(920, 560);
 
 export function OverlayEditor() {
   const editorViewRef = useRef<EditorView | null>(null);
   const folderPanelRef = useRef<HTMLDivElement | null>(null);
+  const editorDateRailRef = useRef<HTMLDivElement | null>(null);
   const activeNote = useNoteStore((state) => state.activeNote);
   const draftContent = useNoteStore((state) => state.draftContent);
   const notes = useNoteStore((state) => state.notes);
+  const notesByDate = useNoteStore((state) => state.notesByDate);
   const trashedNotes = useNoteStore((state) => state.trashedNotes);
   const archivedNotes = useNoteStore((state) => state.archivedNotes);
   const folders = useNoteStore((state) => state.folders);
@@ -86,6 +93,8 @@ export function OverlayEditor() {
   const pendingSave = useNoteStore((state) => state.pendingSave);
   const setDraftContent = useNoteStore((state) => state.setDraftContent);
   const loadNotes = useNoteStore((state) => state.loadNotes);
+  const loadNotesByDate = useNoteStore((state) => state.loadNotesByDate);
+  const clearNotesByDate = useNoteStore((state) => state.clearNotesByDate);
   const loadTrashedNotes = useNoteStore((state) => state.loadTrashedNotes);
   const loadArchivedNotes = useNoteStore((state) => state.loadArchivedNotes);
   const archiveNote = useNoteStore((state) => state.archiveNote);
@@ -113,6 +122,8 @@ export function OverlayEditor() {
   const setSelectedSidebarItem = useUiStore((state) => state.setSelectedSidebarItem);
   const selectedHistoryNoteId = useUiStore((state) => state.selectedHistoryNoteId);
   const setSelectedHistoryNoteId = useUiStore((state) => state.setSelectedHistoryNoteId);
+  const selectedDate = useUiStore((state) => state.selectedDate);
+  const setSelectedDate = useUiStore((state) => state.setSelectedDate);
   const { flushSave } = useAutosaveNote();
   const registeredShortcutRef = useRef("Super+Space");
   const [folderPanelOpen, setFolderPanelOpen] = useState(false);
@@ -123,6 +134,9 @@ export function OverlayEditor() {
   const [confirmPermanentDeleteNoteId, setConfirmPermanentDeleteNoteId] = useState<string | null>(null);
   const [confirmArchiveNoteId, setConfirmArchiveNoteId] = useState<string | null>(null);
   const [pendingOpenNote, setPendingOpenNote] = useState<Note | null>(null);
+  const [calendarPickerOpen, setCalendarPickerOpen] = useState(false);
+  const [editorDayNotesOpen, setEditorDayNotesOpen] = useState(false);
+  const noteDateCounts = useMemo(() => noteCountsByDate(notes), [notes]);
 
   const getCursorPosition = useCallback(
     () => getNoteEditorCursorPosition(editorViewRef.current),
@@ -144,12 +158,29 @@ export function OverlayEditor() {
     }
     resetDraft();
     setSelectedHistoryNoteId(null);
+    setEditorDayNotesOpen(false);
+    setCalendarPickerOpen(false);
     setViewMode("editor");
     await hideOverlay();
     setOverlayVisible(false);
   }, [flushSave, getCursorPosition, resetDraft, setLastCursorPosition, setOverlayVisible, setSelectedHistoryNoteId, setViewMode]);
 
-  useAppShortcuts({ getCursorPosition, focusEditor, closeOverlay });
+  useAppShortcuts({
+    getCursorPosition,
+    focusEditor,
+    closeOverlay,
+    beforeCloseOverlay: () => {
+      if (editorDayNotesOpen) {
+        setEditorDayNotesOpen(false);
+        return true;
+      }
+      if (calendarPickerOpen) {
+        setCalendarPickerOpen(false);
+        return true;
+      }
+      return false;
+    }
+  });
 
   const noteTimestamp = useMemo(() => {
     if (!activeNote) {
@@ -273,7 +304,9 @@ export function OverlayEditor() {
         ? trashedNotes
         : selectedSidebarItem === "archive"
           ? archivedNotes
-          : notes;
+          : selectedSidebarItem === "calendar"
+            ? notesByDate
+            : notes;
     if (selectableNotes.length === 0) {
       setSelectedHistoryNoteId(null);
       return;
@@ -282,7 +315,7 @@ export function OverlayEditor() {
     if (!selectedHistoryNoteId || !selectableNotes.some((note) => note.id === selectedHistoryNoteId)) {
       setSelectedHistoryNoteId(selectableNotes[0]?.id ?? null);
     }
-  }, [archivedNotes, notes, selectedHistoryNoteId, selectedSidebarItem, setSelectedHistoryNoteId, trashedNotes]);
+  }, [archivedNotes, notes, notesByDate, selectedHistoryNoteId, selectedSidebarItem, setSelectedHistoryNoteId, trashedNotes]);
 
   useEffect(() => {
     if (!folderPanelOpen) {
@@ -304,6 +337,15 @@ export function OverlayEditor() {
       void loadNotesByFolder(selectedFolderId, 1000);
     }
   }, [loadNotesByFolder, selectedFolderId, selectedSidebarItem]);
+
+  useEffect(() => {
+    if (selectedSidebarItem === "calendar") {
+      void loadNotesByDate(selectedDate, 1000);
+      return;
+    }
+
+    clearNotesByDate();
+  }, [clearNotesByDate, loadNotesByDate, selectedDate, selectedSidebarItem]);
 
   const moveToBodyStart = useCallback(() => {
     if (draftContent.includes("\n") || draftContent.length === 0) {
@@ -362,6 +404,7 @@ export function OverlayEditor() {
   }, [createFolder, dashboardFolderName, loadNotesByFolder]);
 
   const selectedHistoryNote = notes.find((note) => note.id === selectedHistoryNoteId) ?? null;
+  const selectedCalendarNote = notesByDate.find((note) => note.id === selectedHistoryNoteId) ?? null;
   const selectedArchivedNote = archivedNotes.find((note) => note.id === selectedHistoryNoteId) ?? null;
   const selectedTrashedNote = trashedNotes.find((note) => note.id === selectedHistoryNoteId) ?? null;
   const activeFolders = activeNote?.folders ?? [];
@@ -394,6 +437,29 @@ export function OverlayEditor() {
     window.requestAnimationFrame(focusEditor);
   }, [focusEditor, pendingOpenNote, resetDraft, setActiveNote, setViewMode]);
 
+  const handleEditorDateSelect = useCallback(
+    (date: string) => {
+      setSelectedDate(date);
+      void loadNotesByDate(date, 1000);
+      setEditorDayNotesOpen(true);
+    },
+    [loadNotesByDate, setSelectedDate]
+  );
+
+  const handleCalendarDateSelect = useCallback(
+    (date: string) => {
+      setSelectedDate(date);
+      if (viewMode === "home" && selectedSidebarItem === "calendar") {
+        void loadNotesByDate(date, 1000);
+      } else if (viewMode === "editor") {
+        void loadNotesByDate(date, 1000);
+        setEditorDayNotesOpen(true);
+      }
+      setCalendarPickerOpen(false);
+    },
+    [loadNotesByDate, selectedSidebarItem, setSelectedDate, viewMode]
+  );
+
   const moveSelectedNoteToTrash = useCallback(async () => {
     if (!selectedHistoryNote) {
       return;
@@ -406,7 +472,8 @@ export function OverlayEditor() {
   return (
     <main className="relative flex h-full min-h-0 flex-col bg-[#f7faf6] text-[#172116] dark:bg-[#11170f] dark:text-[#ecf3ea]">
       {viewMode === "editor" ? (
-        <section className="flex h-full min-h-0 flex-col gap-3 px-4 py-3">
+        <section className="grid h-full min-h-0 grid-cols-[1fr_44px] grid-rows-[1fr_auto]">
+          <div className="col-start-1 row-start-1 flex min-h-0 flex-col gap-3 px-4 py-3">
           <header className="flex shrink-0 items-center justify-between gap-4 text-sm">
             <div className="min-w-0 truncate text-[#536150] dark:text-[#b8c7b4]">{noteTimestamp}</div>
             <div className="shrink-0 text-xs font-medium text-[#2f6b43] dark:text-[#9bd38f]">
@@ -415,14 +482,47 @@ export function OverlayEditor() {
           </header>
 
           <div className="relative min-h-0 flex-1">
-            <NoteEditor
-              value={draftContent}
-              onChange={setDraftContent}
-              onCursorChange={setLastCursorPosition}
-              editorViewRef={editorViewRef}
-              showTitleUnderline={!draftContent.includes("\n")}
-              onEnterAtEndOfTitle={moveToBodyStart}
-            />
+            {editorDayNotesOpen ? (
+              <div className="flex h-full min-h-0 flex-col rounded-md border border-[#dce5d8] bg-[#fbfdfb] p-3 dark:border-[#2c3628] dark:bg-[#141b12]">
+                <div className="mb-2 shrink-0 text-xs font-medium uppercase tracking-[0.12em] text-[#657064] dark:text-[#aeb9aa]">
+                  {formatSelectedDateHeader(selectedDate)} · {notesByDate.length}{" "}
+                  {notesByDate.length === 1 ? "note" : "notes"}
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <NoteHistory
+                    selectedNoteId={selectedHistoryNoteId}
+                    onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                    onOpenNote={(note) => {
+                      setEditorDayNotesOpen(false);
+                      openNoteInEditor(note);
+                    }}
+                    notesOverride={notesByDate}
+                    title=""
+                    emptyTitle={`No notes created on ${formatSelectedDateHeader(selectedDate)}`}
+                    timestampField="created_at"
+                    ariaLabel={`Notes created on ${formatSelectedDateHeader(selectedDate)}`}
+                  />
+                </div>
+              </div>
+            ) : (
+              <NoteEditor
+                value={draftContent}
+                onChange={setDraftContent}
+                onCursorChange={setLastCursorPosition}
+                editorViewRef={editorViewRef}
+                showTitleUnderline={!draftContent.includes("\n")}
+                onEnterAtEndOfTitle={moveToBodyStart}
+              />
+            )}
+            {calendarPickerOpen ? (
+              <CalendarPicker
+                selectedDate={selectedDate}
+                noteCounts={noteDateCounts}
+                onSelectDate={handleCalendarDateSelect}
+                onClose={() => setCalendarPickerOpen(false)}
+                anchor="panel"
+              />
+            ) : null}
           </div>
 
           {shortcutFailure ? (
@@ -444,6 +544,7 @@ export function OverlayEditor() {
             </div>
           ) : null}
 
+          {!editorDayNotesOpen ? (
           <div className="relative shrink-0">
             <div className="flex min-h-8 items-center gap-1 overflow-x-auto pb-1">
               {folders.map((folder) => {
@@ -508,31 +609,60 @@ export function OverlayEditor() {
               </div>
             </div>
           </div>
+          ) : null}
 
-          <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#dce5d8] pt-2 dark:border-[#2c3628]">
-            <ShortcutHint keys="Esc" label="Close" />
+          </div>
+          <div
+            ref={editorDateRailRef}
+            data-date-rail
+            className="relative col-start-2 row-start-1 min-h-0 border-l border-[#dce5d8] bg-[#f7faf6] dark:border-[#2c3628] dark:bg-[#11170f]"
+          >
+            <DateStrip
+              orientation="vertical"
+              selectedDate={selectedDate}
+              onSelectDate={handleEditorDateSelect}
+              noteCounts={noteDateCounts}
+              showCalendarTrigger={false}
+            />
+          </div>
+          <footer className="col-span-2 row-start-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#dce5d8] px-4 pt-2 dark:border-[#2c3628]">
+            <ShortcutHint keys="Esc" label={editorDayNotesOpen ? "Back" : "Close"} />
             <ShortcutHint keys="Ctrl N" label="New" />
             <ShortcutHint keys="Ctrl P" label="Pin" />
             {pendingSave ? (
               <span className="text-xs text-[#8a5a2a] dark:text-[#f0c48d]">Local draft</span>
             ) : null}
-            <button
-              type="button"
-              aria-label="Open dashboard"
-              onMouseDown={(event) =>
-                handleMouseDownAction(event, () => {
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                data-calendar-trigger
+                aria-label="Open calendar"
+                onMouseDown={(event) =>
+                  handleMouseDownAction(event, () => setCalendarPickerOpen((open) => !open))
+                }
+                onClick={(event) => event.preventDefault()}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#dce5d8] bg-transparent text-[#2f6b43] transition hover:bg-[#eef4ec] dark:border-[#2c3628] dark:bg-transparent dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
+              >
+                <Calendar size={16} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label="Open dashboard"
+                onMouseDown={(event) =>
+                  handleMouseDownAction(event, () => {
+                    setSelectedSidebarItem("recent");
+                    setViewMode("home");
+                  })
+                }
+                onClick={() => {
                   setSelectedSidebarItem("recent");
                   setViewMode("home");
-                })
-              }
-              onClick={() => {
-                setSelectedSidebarItem("recent");
-                setViewMode("home");
-              }}
-              className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#dce5d8] bg-transparent text-[#2f6b43] transition hover:bg-[#eef4ec] dark:border-[#2c3628] dark:bg-transparent dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
-            >
-              <Home size={16} aria-hidden="true" />
-            </button>
+                }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#dce5d8] bg-transparent text-[#2f6b43] transition hover:bg-[#eef4ec] dark:border-[#2c3628] dark:bg-transparent dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
+              >
+                <Home size={16} aria-hidden="true" />
+              </button>
+            </div>
           </footer>
         </section>
       ) : (
@@ -577,6 +707,24 @@ export function OverlayEditor() {
             >
               <NotebookText size={16} aria-hidden="true" />
               Recent
+            </button>
+            <button
+              type="button"
+              aria-pressed={selectedSidebarItem === "calendar"}
+              onMouseDown={(event) =>
+                handleMouseDownAction(event, () => {
+                  setSelectedSidebarItem("calendar");
+                  void loadNotesByDate(selectedDate, 1000);
+                })
+              }
+              onClick={() => {
+                setSelectedSidebarItem("calendar");
+                void loadNotesByDate(selectedDate, 1000);
+              }}
+              className="mt-1 flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-[#253022] transition hover:bg-[#e5eee1] aria-pressed:bg-[#dce8d8] dark:text-[#e2eadf] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#263220]"
+            >
+              <Calendar size={16} aria-hidden="true" />
+              Calendar
             </button>
             <button
               type="button"
@@ -724,6 +872,139 @@ export function OverlayEditor() {
                   No recent notes yet
                 </div>
               )
+            ) : null}
+            {selectedSidebarItem === "calendar" ? (
+              <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[240px_1fr]">
+                <div className="self-start rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-2 dark:border-[#2c3628] dark:bg-[#141b12]">
+                  <MonthCalendar
+                    selectedDate={selectedDate}
+                    noteCounts={noteDateCounts}
+                    onSelectDate={(date) => {
+                      setSelectedDate(date);
+                      void loadNotesByDate(date, 1000);
+                    }}
+                  />
+                </div>
+                {notesByDate.length > 0 ? (
+                  <div className="grid min-h-0 gap-4 lg:grid-cols-[280px_1fr]">
+                    <div className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-3 dark:border-[#2c3628] dark:bg-[#141b12]">
+                      <NoteHistory
+                        selectedNoteId={selectedHistoryNoteId}
+                        onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                        onOpenNote={openNoteInEditor}
+                        notesOverride={notesByDate}
+                        title={formatSelectedDateHeader(selectedDate)}
+                        timestampField="created_at"
+                        ariaLabel={`Notes created on ${formatSelectedDateHeader(selectedDate)}`}
+                      />
+                    </div>
+                    <article className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-4 dark:border-[#2c3628] dark:bg-[#141b12]">
+                      {selectedCalendarNote ? (
+                        <div className="flex h-full flex-col">
+                          <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[#657064] dark:text-[#aeb9aa]">
+                            {selectedCalendarNote.pinned ? <Pin size={13} aria-hidden="true" /> : null}
+                            <span>
+                              {dayjs(selectedCalendarNote.created_at).format("MMM D, YYYY h:mm A")}
+                            </span>
+                          </div>
+                          <h2 className="mb-3 text-lg font-semibold text-[#253022] dark:text-[#e2eadf]">
+                            {previewContent(selectedCalendarNote.content)}
+                          </h2>
+                          <div className="flex-1 text-sm leading-6 text-[#334030] dark:text-[#d4ddd1]">
+                            {previewContent(selectedCalendarNote.content)}
+                          </div>
+                          <div className="mt-4 flex items-center gap-2 border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]">
+                            <button
+                              type="button"
+                              onMouseDown={(event) =>
+                                handleMouseDownAction(event, () => openNoteInEditor(selectedCalendarNote))
+                              }
+                              onClick={() => openNoteInEditor(selectedCalendarNote)}
+                              aria-label="Edit note"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white transition hover:bg-[#255736] dark:bg-[#3d8756] dark:hover:bg-[#347349]"
+                            >
+                              <PenSquare size={15} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Archive note"
+                              onMouseDown={(event) =>
+                                handleMouseDownAction(event, () => {
+                                  if (confirmArchiveNoteId === selectedCalendarNote.id) {
+                                    void archiveNote(selectedCalendarNote.id).then(() => {
+                                      setConfirmArchiveNoteId(null);
+                                      setSelectedHistoryNoteId(null);
+                                      void loadNotesByDate(selectedDate, 1000);
+                                    });
+                                  } else {
+                                    setConfirmArchiveNoteId(selectedCalendarNote.id);
+                                  }
+                                })
+                              }
+                              onClick={() => {
+                                if (confirmArchiveNoteId === selectedCalendarNote.id) {
+                                  void archiveNote(selectedCalendarNote.id).then(() => {
+                                    setConfirmArchiveNoteId(null);
+                                    setSelectedHistoryNoteId(null);
+                                    void loadNotesByDate(selectedDate, 1000);
+                                  });
+                                } else {
+                                  setConfirmArchiveNoteId(selectedCalendarNote.id);
+                                }
+                              }}
+                              className="inline-flex h-8 items-center justify-center rounded-md px-2 text-xs font-medium text-[#536150] transition hover:bg-[#eef4ec] dark:text-[#b8c7b4] dark:hover:bg-[#202a1d]"
+                            >
+                              {confirmArchiveNoteId === selectedCalendarNote.id ? (
+                                "Archive?"
+                              ) : (
+                                <Archive size={15} />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Delete note"
+                              onMouseDown={(event) =>
+                                handleMouseDownAction(event, async () => {
+                                  if (confirmSoftDeleteNoteId === selectedCalendarNote.id) {
+                                    await softDeleteNote(selectedCalendarNote.id);
+                                    setConfirmSoftDeleteNoteId(null);
+                                    setSelectedHistoryNoteId(null);
+                                    void loadNotesByDate(selectedDate, 1000);
+                                  } else {
+                                    setConfirmSoftDeleteNoteId(selectedCalendarNote.id);
+                                  }
+                                })
+                              }
+                              onClick={() => {
+                                if (confirmSoftDeleteNoteId === selectedCalendarNote.id) {
+                                  void softDeleteNote(selectedCalendarNote.id).then(() => {
+                                    setConfirmSoftDeleteNoteId(null);
+                                    setSelectedHistoryNoteId(null);
+                                    void loadNotesByDate(selectedDate, 1000);
+                                  });
+                                } else {
+                                  setConfirmSoftDeleteNoteId(selectedCalendarNote.id);
+                                }
+                              }}
+                              className="inline-flex h-8 items-center justify-center rounded-md px-2 text-xs font-medium text-[#8a3d2b] transition hover:bg-[#fae9e4] dark:text-[#f0a394] dark:hover:bg-[#2a1b18]"
+                            >
+                              {confirmSoftDeleteNoteId === selectedCalendarNote.id ? (
+                                "Delete?"
+                              ) : (
+                                <Trash2 size={15} />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </article>
+                  </div>
+                ) : (
+                  <div className="flex min-h-0 items-center justify-center rounded-xl border border-dashed border-[#dce5d8] bg-[#fbfdfb] text-sm text-[#657064] dark:border-[#2c3628] dark:bg-[#141b12] dark:text-[#aeb9aa]">
+                    No notes created on {formatSelectedDateHeader(selectedDate)}
+                  </div>
+                )}
+              </div>
             ) : null}
             {selectedSidebarItem === "folders" ? (
               <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[260px_1fr]">

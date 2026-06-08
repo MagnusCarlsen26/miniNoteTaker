@@ -109,6 +109,14 @@ export function listNotesByFolder(folderId: string, limit?: number): Promise<Not
   return invoke<Note[]>("list_notes_by_folder", { folderId, limit });
 }
 
+export function listNotesByCreatedDate(
+  startIso: string,
+  endIso: string,
+  limit?: number
+): Promise<Note[]> {
+  return invoke<Note[]>("list_notes_by_created_date", { startIso, endIso, limit });
+}
+
 export function setNoteFolders(noteId: string, folderIds: string[]): Promise<Note> {
   return invoke<Note>("set_note_folders", { noteId, folderIds });
 }

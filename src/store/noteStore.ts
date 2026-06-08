@@ -8,6 +8,7 @@ import {
   listArchivedNotes,
   listFolders,
   listNotes,
+  listNotesByCreatedDate,
   listNotesByFolder,
   listTrashedNotes,
   permanentlyDeleteNote as permanentlyDeleteNoteCommand,
@@ -18,6 +19,7 @@ import {
   unarchiveNote as unarchiveNoteCommand,
   updateNote
 } from "../lib/tauri";
+import { localDayBounds } from "../lib/dates";
 import type { Folder, Note, SaveStatus } from "../types/note";
 
 type PendingSave = {
@@ -31,6 +33,7 @@ type NoteState = {
   activeNote: Note | null;
   draftContent: string;
   notes: Note[];
+  notesByDate: Note[];
   trashedNotes: Note[];
   archivedNotes: Note[];
   folders: Folder[];
@@ -44,6 +47,8 @@ type NoteState = {
   setDraftContent: (content: string) => void;
   setActiveNote: (note: Note | null) => void;
   loadNotes: (limit?: number) => Promise<void>;
+  loadNotesByDate: (date: string, limit?: number) => Promise<void>;
+  clearNotesByDate: () => void;
   loadTrashedNotes: (limit?: number) => Promise<void>;
   loadArchivedNotes: (limit?: number) => Promise<void>;
   archiveNote: (id: string) => Promise<void>;
@@ -104,6 +109,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   activeNote: null,
   draftContent: "",
   notes: [],
+  notesByDate: [],
   trashedNotes: [],
   archivedNotes: [],
   folders: [],
@@ -134,6 +140,14 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     const notes = await listNotes(limit);
     set({ notes });
   },
+
+  loadNotesByDate: async (date, limit) => {
+    const { startIso, endIso } = localDayBounds(date);
+    const notesByDate = await listNotesByCreatedDate(startIso, endIso, limit);
+    set({ notesByDate });
+  },
+
+  clearNotesByDate: () => set({ notesByDate: [] }),
 
   loadTrashedNotes: async (limit) => {
     try {

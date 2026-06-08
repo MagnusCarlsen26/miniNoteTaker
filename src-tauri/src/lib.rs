@@ -45,6 +45,7 @@ pub fn run() {
             commands::create_folder,
             commands::list_folders,
             commands::delete_folder,
+            commands::list_notes_by_created_date,
             commands::list_notes_by_folder,
             commands::set_note_folders,
             commands::get_setting,

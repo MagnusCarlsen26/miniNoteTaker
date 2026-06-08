@@ -1,8 +1,9 @@
 import { create } from "zustand";
+import { todayDateKey } from "../lib/dates";
 import type { ThemePreference } from "../types/note";
 
 export type ViewMode = "editor" | "home";
-export type SidebarItem = "recent" | "folders" | "archive" | "trash";
+export type SidebarItem = "recent" | "calendar" | "folders" | "archive" | "trash";
 
 type UiState = {
   isOverlayVisible: boolean;
@@ -16,6 +17,7 @@ type UiState = {
   viewMode: ViewMode;
   selectedSidebarItem: SidebarItem;
   selectedHistoryNoteId: string | null;
+  selectedDate: string;
   setOverlayVisible: (isOverlayVisible: boolean) => void;
   setLastCommandResult: (lastCommandResult: string | null) => void;
   setTheme: (theme: ThemePreference) => void;
@@ -26,6 +28,7 @@ type UiState = {
   setViewMode: (viewMode: ViewMode) => void;
   setSelectedSidebarItem: (selectedSidebarItem: SidebarItem) => void;
   setSelectedHistoryNoteId: (selectedHistoryNoteId: string | null) => void;
+  setSelectedDate: (selectedDate: string) => void;
 };
 
 export const useUiStore = create<UiState>((set) => ({
@@ -40,6 +43,7 @@ export const useUiStore = create<UiState>((set) => ({
   viewMode: "editor",
   selectedSidebarItem: "recent",
   selectedHistoryNoteId: null,
+  selectedDate: todayDateKey(),
   setOverlayVisible: (isOverlayVisible) => set({ isOverlayVisible }),
   setLastCommandResult: (lastCommandResult) => set({ lastCommandResult }),
   setTheme: (theme) => set({ theme }),
@@ -49,5 +53,6 @@ export const useUiStore = create<UiState>((set) => ({
   setShortcutFailure: (shortcutFailure) => set({ shortcutFailure }),
   setViewMode: (viewMode) => set({ viewMode }),
   setSelectedSidebarItem: (selectedSidebarItem) => set({ selectedSidebarItem }),
-  setSelectedHistoryNoteId: (selectedHistoryNoteId) => set({ selectedHistoryNoteId })
+  setSelectedHistoryNoteId: (selectedHistoryNoteId) => set({ selectedHistoryNoteId }),
+  setSelectedDate: (selectedDate) => set({ selectedDate })
 }));

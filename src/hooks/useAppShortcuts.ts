@@ -6,9 +6,15 @@ type UseAppShortcutsOptions = {
   getCursorPosition: () => number;
   focusEditor: () => void;
   closeOverlay: () => Promise<void>;
+  beforeCloseOverlay?: () => boolean;
 };
 
-export function useAppShortcuts({ getCursorPosition, focusEditor, closeOverlay }: UseAppShortcutsOptions) {
+export function useAppShortcuts({
+  getCursorPosition,
+  focusEditor,
+  closeOverlay,
+  beforeCloseOverlay
+}: UseAppShortcutsOptions) {
   const resetDraft = useNoteStore((state) => state.resetDraft);
   const togglePinned = useNoteStore((state) => state.togglePinned);
   const setLastCursorPosition = useUiStore((state) => state.setLastCursorPosition);
@@ -17,11 +23,14 @@ export function useAppShortcuts({ getCursorPosition, focusEditor, closeOverlay }
     "escape",
     (event) => {
       event.preventDefault();
+      if (beforeCloseOverlay?.()) {
+        return;
+      }
       setLastCursorPosition(getCursorPosition());
       void closeOverlay();
     },
     { enableOnFormTags: true, enableOnContentEditable: true },
-    [closeOverlay, getCursorPosition, setLastCursorPosition]
+    [beforeCloseOverlay, closeOverlay, getCursorPosition, setLastCursorPosition]
   );
 
   useHotkeys(

@@ -12,10 +12,20 @@ type NoteHistoryProps = {
   notesOverride?: Note[];
   title?: string;
   emptyTitle?: string;
-  timestampField?: "updated_at" | "deleted_at";
+  timestampField?: "updated_at" | "deleted_at" | "created_at";
   ariaLabel?: string;
   maxVisible?: number;
 };
+
+function noteTimestamp(note: Note, timestampField: "updated_at" | "deleted_at" | "created_at") {
+  if (timestampField === "deleted_at") {
+    return note.deleted_at ?? note.updated_at;
+  }
+  if (timestampField === "created_at") {
+    return note.created_at;
+  }
+  return note.updated_at;
+}
 
 function formatRelativeTime(updatedAt: string) {
   const now = dayjs();
@@ -122,9 +132,11 @@ export function NoteHistory({
         }
       }}
     >
-      <div className="mb-2 text-xs font-medium uppercase text-[#657064] dark:text-[#aeb9aa]">
-        {title}
-      </div>
+      {title ? (
+        <div className="mb-2 text-xs font-medium uppercase text-[#657064] dark:text-[#aeb9aa]">
+          {title}
+        </div>
+      ) : null}
       <div className="grid gap-1">
         {visibleNotes.map((note, index) => (
           <button
@@ -149,7 +161,7 @@ export function NoteHistory({
               ) : null}
             </span>
             <span className="whitespace-nowrap text-xs text-[#657064] dark:text-[#aeb9aa]">
-              {formatRelativeTime(timestampField === "deleted_at" ? note.deleted_at ?? note.updated_at : note.updated_at)}
+              {formatRelativeTime(noteTimestamp(note, timestampField))}
             </span>
           </button>
         ))}

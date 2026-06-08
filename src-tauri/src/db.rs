@@ -441,6 +441,31 @@ impl Database {
         Ok(())
     }
 
+    pub fn list_notes_by_created_date(
+        &self,
+        start_iso: String,
+        end_iso: String,
+        limit: Option<u32>,
+    ) -> Result<Vec<NoteDto>, AppError> {
+        let limit = limit.unwrap_or(1000).min(1000);
+        let connection = self.lock_connection();
+        let mut statement = connection.prepare(
+            "SELECT id, content, pinned, created_at, updated_at, deleted_at, archived_at
+             FROM notes
+             WHERE deleted_at IS NULL AND archived_at IS NULL
+               AND created_at >= ?1 AND created_at < ?2
+             ORDER BY pinned DESC, created_at DESC
+             LIMIT ?3",
+        )?;
+
+        let notes = statement
+            .query_map(params![start_iso, end_iso, limit], note_from_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        drop(statement);
+
+        hydrate_note_folders(&connection, notes)
+    }
+
     pub fn list_notes_by_folder(
         &self,
         folder_id: String,
@@ -677,6 +702,7 @@ fn initialize_connection(connection: &Connection) -> Result<(), AppError> {
 
     migrate_deleted_at(connection)?;
     migrate_archived_at(connection)?;
+    migrate_created_at_index(connection)?;
 
     Ok(())
 }
@@ -696,6 +722,15 @@ fn migrate_deleted_at(connection: &Connection) -> Result<(), AppError> {
 
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_notes_deleted_at ON notes(deleted_at DESC)",
+        [],
+    )?;
+
+    Ok(())
+}
+
+fn migrate_created_at_index(connection: &Connection) -> Result<(), AppError> {
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC)",
         [],
     )?;
 
@@ -1267,6 +1302,92 @@ mod tests {
             .list_notes_by_folder(folder.id, None)
             .unwrap()
             .is_empty());
+    }
+
+    impl Database {
+        fn set_created_at_for_test(&self, id: &str, created_at: &str) -> Result<(), AppError> {
+            let connection = self.lock_connection();
+            connection.execute(
+                "UPDATE notes SET created_at = ?1 WHERE id = ?2",
+                params![created_at, id],
+            )?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn list_notes_by_created_date_returns_notes_within_day_bounds() {
+        let database = Database::new_in_memory().unwrap();
+        let in_day = database.create_note("today note".to_string()).unwrap();
+        let next_day = database.create_note("tomorrow note".to_string()).unwrap();
+        database
+            .set_created_at_for_test(&in_day.id, "2026-06-08T14:30:00Z")
+            .unwrap();
+        database
+            .set_created_at_for_test(&next_day.id, "2026-06-09T00:00:01Z")
+            .unwrap();
+
+        let notes = database
+            .list_notes_by_created_date(
+                "2026-06-08T00:00:00Z".to_string(),
+                "2026-06-09T00:00:00Z".to_string(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].id, in_day.id);
+    }
+
+    #[test]
+    fn list_notes_by_created_date_excludes_trashed_and_archived_notes() {
+        let database = Database::new_in_memory().unwrap();
+        let active = database.create_note("active".to_string()).unwrap();
+        let trashed = database.create_note("trashed".to_string()).unwrap();
+        let archived = database.create_note("archived".to_string()).unwrap();
+        let start = "2026-06-08T00:00:00Z".to_string();
+        let end = "2026-06-09T00:00:00Z".to_string();
+
+        for note in [&active, &trashed, &archived] {
+            database
+                .set_created_at_for_test(&note.id, "2026-06-08T12:00:00Z")
+                .unwrap();
+        }
+
+        database.soft_delete_note(trashed.id.clone()).unwrap();
+        database.archive_note(archived.id.clone()).unwrap();
+
+        let notes = database
+            .list_notes_by_created_date(start, end, None)
+            .unwrap();
+
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].id, active.id);
+    }
+
+    #[test]
+    fn list_notes_by_created_date_orders_pinned_first_then_newest_created() {
+        let database = Database::new_in_memory().unwrap();
+        let older = database.create_note("older".to_string()).unwrap();
+        let newer = database.create_note("newer".to_string()).unwrap();
+        database
+            .set_created_at_for_test(&older.id, "2026-06-08T10:00:00Z")
+            .unwrap();
+        database
+            .set_created_at_for_test(&newer.id, "2026-06-08T18:00:00Z")
+            .unwrap();
+        database.set_pinned(older.id.clone(), true).unwrap();
+
+        let notes = database
+            .list_notes_by_created_date(
+                "2026-06-08T00:00:00Z".to_string(),
+                "2026-06-09T00:00:00Z".to_string(),
+                None,
+            )
+            .unwrap();
+        let ids = notes.iter().map(|note| note.id.as_str()).collect::<Vec<_>>();
+
+        assert_eq!(ids, vec![older.id.as_str(), newer.id.as_str()]);
     }
 
     #[test]
