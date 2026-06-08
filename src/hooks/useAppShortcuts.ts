@@ -20,7 +20,7 @@ export function useAppShortcuts({ getCursorPosition, focusEditor, closeOverlay }
       setLastCursorPosition(getCursorPosition());
       void closeOverlay();
     },
-    { enableOnFormTags: true },
+    { enableOnFormTags: true, enableOnContentEditable: true },
     [closeOverlay, getCursorPosition, setLastCursorPosition]
   );
 
@@ -32,7 +32,7 @@ export function useAppShortcuts({ getCursorPosition, focusEditor, closeOverlay }
       setLastCursorPosition(0);
       window.requestAnimationFrame(focusEditor);
     },
-    { enableOnFormTags: true },
+    { enableOnFormTags: true, enableOnContentEditable: true },
     [focusEditor, resetDraft, setLastCursorPosition]
   );
 
@@ -42,7 +42,7 @@ export function useAppShortcuts({ getCursorPosition, focusEditor, closeOverlay }
       event.preventDefault();
       void togglePinned();
     },
-    { enableOnFormTags: true },
+    { enableOnFormTags: true, enableOnContentEditable: true },
     [togglePinned]
   );
 }
