@@ -52,7 +52,7 @@ describe("DateStrip", () => {
     expect(onSelectDate).toHaveBeenCalledWith(tomorrow);
   });
 
-  it("scrolls today into view on mount", () => {
+  it("centers selected date on mount", () => {
     const today = todayDateKey();
     const scrollIntoView = vi.fn();
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
@@ -67,6 +67,36 @@ describe("DateStrip", () => {
       />
     );
 
-    expect(scrollIntoView).toHaveBeenCalled();
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", inline: "center" });
+  });
+
+  it("recenters selected date when overlay becomes visible again", () => {
+    const today = todayDateKey();
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+    const { rerender } = render(
+      <DateStrip
+        orientation="vertical"
+        selectedDate={today}
+        onSelectDate={() => undefined}
+        noteCounts={{}}
+        visible={false}
+      />
+    );
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    rerender(
+      <DateStrip
+        orientation="vertical"
+        selectedDate={today}
+        onSelectDate={() => undefined}
+        noteCounts={{}}
+        visible
+      />
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", inline: "center" });
   });
 });

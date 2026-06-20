@@ -7,6 +7,10 @@ vi.mock("../lib/tauri", () => ({
   createNote: vi.fn(),
   deleteFolder: vi.fn(),
   deleteEmptyNote: vi.fn(),
+  getNote: vi.fn(),
+  getSetting: vi.fn(),
+  setSetting: vi.fn(),
+  LAST_OPEN_NOTE_ID_KEY: "editor.lastNoteId",
   listArchivedNotes: vi.fn(),
   listFolders: vi.fn(),
   listNotes: vi.fn(),
@@ -27,6 +31,9 @@ import {
   createFolder,
   createNote,
   deleteFolder,
+  getNote,
+  getSetting,
+  LAST_OPEN_NOTE_ID_KEY,
   listArchivedNotes,
   listFolders,
   listNotes,
@@ -34,6 +41,7 @@ import {
   permanentlyDeleteNote,
   restoreNote,
   setNoteFolders,
+  setSetting,
   softDeleteNote,
   unarchiveNote,
   updateNote
@@ -46,12 +54,15 @@ const listArchivedNotesMock = vi.mocked(listArchivedNotes);
 const unarchiveNoteMock = vi.mocked(unarchiveNote);
 const createFolderMock = vi.mocked(createFolder);
 const deleteFolderMock = vi.mocked(deleteFolder);
+const getNoteMock = vi.mocked(getNote);
+const getSettingMock = vi.mocked(getSetting);
 const listFoldersMock = vi.mocked(listFolders);
 const listNotesMock = vi.mocked(listNotes);
 const listTrashedNotesMock = vi.mocked(listTrashedNotes);
 const permanentlyDeleteNoteMock = vi.mocked(permanentlyDeleteNote);
 const restoreNoteMock = vi.mocked(restoreNote);
 const setNoteFoldersMock = vi.mocked(setNoteFolders);
+const setSettingMock = vi.mocked(setSetting);
 const softDeleteNoteMock = vi.mocked(softDeleteNote);
 const updateNoteMock = vi.mocked(updateNote);
 
@@ -109,7 +120,7 @@ describe("noteStore", () => {
 
     await useNoteStore.getState().saveDraft();
 
-    expect(createNoteMock).toHaveBeenCalledWith("hello");
+    expect(createNoteMock).toHaveBeenCalledWith("hello", undefined);
     expect(useNoteStore.getState().activeNote).toEqual(saved);
     expect(useNoteStore.getState().notes).toEqual([saved]);
     expect(useNoteStore.getState().saveStatus).toBe("saved");
@@ -155,7 +166,7 @@ describe("noteStore", () => {
 
     await useNoteStore.getState().retryPendingSave();
 
-    expect(createNoteMock).toHaveBeenCalledWith("pending");
+    expect(createNoteMock).toHaveBeenCalledWith("pending", undefined);
     expect(useNoteStore.getState().pendingSave).toBeNull();
     expect(useNoteStore.getState().saveStatus).toBe("saved");
   });
@@ -234,7 +245,7 @@ describe("noteStore", () => {
 
     await useNoteStore.getState().setActiveNoteFolders(["folder-1"]);
 
-    expect(createNoteMock).toHaveBeenCalledWith("draft");
+    expect(createNoteMock).toHaveBeenCalledWith("draft", undefined);
     expect(setNoteFoldersMock).toHaveBeenCalledWith("note-1", ["folder-1"]);
     expect(useNoteStore.getState().activeNote).toEqual(assigned);
   });
@@ -273,7 +284,7 @@ describe("noteStore", () => {
 
     await useNoteStore.getState().retryPendingSave();
 
-    expect(createNoteMock).toHaveBeenCalledWith("pending");
+    expect(createNoteMock).toHaveBeenCalledWith("pending", undefined);
     expect(setNoteFoldersMock).toHaveBeenCalledWith("note-1", ["folder-1"]);
     expect(useNoteStore.getState().activeNote).toEqual(assigned);
   });
@@ -382,5 +393,63 @@ describe("noteStore", () => {
     expect(useNoteStore.getState().folders).toEqual([]);
     expect(useNoteStore.getState().notes).toEqual([remaining]);
     expect(useNoteStore.getState().trashedNotes).toEqual([trashed]);
+  });
+
+  it("persistLastOpenNoteId writes setting when activeNote is set", async () => {
+    const active = note({ id: "note-a" });
+    useNoteStore.getState().setActiveNote(active);
+
+    await useNoteStore.getState().persistLastOpenNoteId();
+
+    expect(setSettingMock).toHaveBeenCalledWith(LAST_OPEN_NOTE_ID_KEY, "note-a");
+  });
+
+  it("persistLastOpenNoteId skips when activeNote is null", async () => {
+    await useNoteStore.getState().persistLastOpenNoteId();
+
+    expect(setSettingMock).not.toHaveBeenCalled();
+  });
+
+  it("restoreLastOpenNote loads note when setting exists and editor is empty", async () => {
+    const saved = note({ id: "note-a", content: "restored" });
+    getSettingMock.mockResolvedValue("note-a");
+    getNoteMock.mockResolvedValue(saved);
+
+    await useNoteStore.getState().restoreLastOpenNote();
+
+    expect(getSettingMock).toHaveBeenCalledWith(LAST_OPEN_NOTE_ID_KEY);
+    expect(getNoteMock).toHaveBeenCalledWith("note-a");
+    expect(useNoteStore.getState().activeNote).toEqual(saved);
+    expect(useNoteStore.getState().draftContent).toBe("restored");
+  });
+
+  it("restoreLastOpenNote is a no-op when editor already has active note", async () => {
+    useNoteStore.getState().setActiveNote(note({ id: "current" }));
+
+    await useNoteStore.getState().restoreLastOpenNote();
+
+    expect(getSettingMock).not.toHaveBeenCalled();
+    expect(getNoteMock).not.toHaveBeenCalled();
+    expect(useNoteStore.getState().activeNote?.id).toBe("current");
+  });
+
+  it("restoreLastOpenNote is a no-op when editor has draft content", async () => {
+    useNoteStore.getState().setDraftContent("typing");
+
+    await useNoteStore.getState().restoreLastOpenNote();
+
+    expect(getSettingMock).not.toHaveBeenCalled();
+    expect(getNoteMock).not.toHaveBeenCalled();
+  });
+
+  it("restoreLastOpenNote is a no-op when note is missing", async () => {
+    getSettingMock.mockResolvedValue("gone");
+    getNoteMock.mockResolvedValue(null);
+
+    await useNoteStore.getState().restoreLastOpenNote();
+
+    expect(getNoteMock).toHaveBeenCalledWith("gone");
+    expect(useNoteStore.getState().activeNote).toBeNull();
+    expect(useNoteStore.getState().draftContent).toBe("");
   });
 });

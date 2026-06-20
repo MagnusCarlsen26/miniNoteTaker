@@ -109,7 +109,11 @@ export function OverlayEditor() {
   const loadNotesByFolder = useNoteStore((state) => state.loadNotesByFolder);
   const toggleActiveNoteFolder = useNoteStore((state) => state.toggleActiveNoteFolder);
   const resetDraft = useNoteStore((state) => state.resetDraft);
+  const persistLastOpenNoteId = useNoteStore((state) => state.persistLastOpenNoteId);
+  const restoreLastOpenNote = useNoteStore((state) => state.restoreLastOpenNote);
+  const setDraftCreatedDate = useNoteStore((state) => state.setDraftCreatedDate);
   const setOverlayVisible = useUiStore((state) => state.setOverlayVisible);
+  const isOverlayVisible = useUiStore((state) => state.isOverlayVisible);
   const setLastCursorPosition = useUiStore((state) => state.setLastCursorPosition);
   const setTheme = useUiStore((state) => state.setTheme);
   const setToastMessage = useUiStore((state) => state.setToastMessage);
@@ -156,6 +160,7 @@ export function OverlayEditor() {
     } catch {
       // Window size persistence should never block closing the overlay.
     }
+    await persistLastOpenNoteId();
     resetDraft();
     setSelectedHistoryNoteId(null);
     setEditorDayNotesOpen(false);
@@ -163,7 +168,7 @@ export function OverlayEditor() {
     setViewMode("editor");
     await hideOverlay();
     setOverlayVisible(false);
-  }, [flushSave, getCursorPosition, resetDraft, setLastCursorPosition, setOverlayVisible, setSelectedHistoryNoteId, setViewMode]);
+  }, [flushSave, getCursorPosition, persistLastOpenNoteId, resetDraft, setLastCursorPosition, setOverlayVisible, setSelectedHistoryNoteId, setViewMode]);
 
   useAppShortcuts({
     getCursorPosition,
@@ -231,13 +236,14 @@ export function OverlayEditor() {
         setShortcutFailure(null);
         registeredShortcutRef.current = "Super+Space";
       }
+      await restoreLastOpenNote();
       window.requestAnimationFrame(focusEditor);
     });
 
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [focusEditor, setOverlayVisible, setShortcutFailure]);
+  }, [focusEditor, restoreLastOpenNote, setOverlayVisible, setShortcutFailure]);
 
   useEffect(() => {
     const window = getCurrentWindow();
@@ -460,6 +466,13 @@ export function OverlayEditor() {
     [loadNotesByDate, selectedSidebarItem, setSelectedDate, viewMode]
   );
 
+  const handleCreateNoteOnSelectedDate = useCallback(() => {
+    setDraftCreatedDate(selectedDate);
+    resetDraft();
+    setViewMode("editor");
+    window.requestAnimationFrame(focusEditor);
+  }, [focusEditor, resetDraft, selectedDate, setDraftCreatedDate, setViewMode]);
+
   const moveSelectedNoteToTrash = useCallback(async () => {
     if (!selectedHistoryNote) {
       return;
@@ -623,6 +636,7 @@ export function OverlayEditor() {
               onSelectDate={handleEditorDateSelect}
               noteCounts={noteDateCounts}
               showCalendarTrigger={false}
+              visible={isOverlayVisible}
             />
           </div>
           <footer className="col-span-2 row-start-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#dce5d8] px-4 pt-2 dark:border-[#2c3628]">
@@ -885,19 +899,23 @@ export function OverlayEditor() {
                     }}
                   />
                 </div>
+                <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[280px_1fr]">
+                  <div className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-3 dark:border-[#2c3628] dark:bg-[#141b12]">
+                    <NoteHistory
+                      selectedNoteId={selectedHistoryNoteId}
+                      onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
+                      onOpenNote={openNoteInEditor}
+                      notesOverride={notesByDate}
+                      title={formatSelectedDateHeader(selectedDate)}
+                      emptyTitle={`No notes created on ${formatSelectedDateHeader(selectedDate)}`}
+                      timestampField="created_at"
+                      ariaLabel={`Notes created on ${formatSelectedDateHeader(selectedDate)}`}
+                      onCreateNote={handleCreateNoteOnSelectedDate}
+                      createNoteLabel={`New note on ${formatSelectedDateHeader(selectedDate)}`}
+                    />
+                  </div>
                 {notesByDate.length > 0 ? (
-                  <div className="grid min-h-0 gap-4 lg:grid-cols-[280px_1fr]">
-                    <div className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-3 dark:border-[#2c3628] dark:bg-[#141b12]">
-                      <NoteHistory
-                        selectedNoteId={selectedHistoryNoteId}
-                        onSelectNote={(note) => setSelectedHistoryNoteId(note.id)}
-                        onOpenNote={openNoteInEditor}
-                        notesOverride={notesByDate}
-                        title={formatSelectedDateHeader(selectedDate)}
-                        timestampField="created_at"
-                        ariaLabel={`Notes created on ${formatSelectedDateHeader(selectedDate)}`}
-                      />
-                    </div>
+                  <>
                     <article className="min-h-0 overflow-y-auto rounded-xl border border-[#dce5d8] bg-[#fbfdfb] p-4 dark:border-[#2c3628] dark:bg-[#141b12]">
                       {selectedCalendarNote ? (
                         <div className="flex h-full flex-col">
@@ -998,12 +1016,13 @@ export function OverlayEditor() {
                         </div>
                       ) : null}
                     </article>
-                  </div>
+                  </>
                 ) : (
                   <div className="flex min-h-0 items-center justify-center rounded-xl border border-dashed border-[#dce5d8] bg-[#fbfdfb] text-sm text-[#657064] dark:border-[#2c3628] dark:bg-[#141b12] dark:text-[#aeb9aa]">
-                    No notes created on {formatSelectedDateHeader(selectedDate)}
+                    Select a note or create one
                   </div>
                 )}
+                </div>
               </div>
             ) : null}
             {selectedSidebarItem === "folders" ? (

@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import { Calendar } from "lucide-react";
-import { KeyboardEvent, MouseEvent, useEffect, useMemo, useRef } from "react";
+import { KeyboardEvent, MouseEvent, useLayoutEffect, useMemo, useRef } from "react";
 import { buildDateRange, todayDateKey } from "../lib/dates";
 
 type DateStripProps = {
@@ -10,6 +10,7 @@ type DateStripProps = {
   noteCounts: Record<string, number>;
   onOpenCalendar?: () => void;
   showCalendarTrigger?: boolean;
+  visible?: boolean;
 };
 
 function handleMouseDownAction(event: MouseEvent<HTMLElement>, action: () => void) {
@@ -27,18 +28,23 @@ export function DateStrip({
   onSelectDate,
   noteCounts,
   onOpenCalendar,
-  showCalendarTrigger = true
+  showCalendarTrigger = true,
+  visible = true
 }: DateStripProps) {
   const today = todayDateKey();
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const todayRef = useRef<HTMLButtonElement | null>(null);
+  const selectedDateRef = useRef<HTMLButtonElement | null>(null);
   const dates = useMemo(() => buildDateRange(today, 120, 120), [today]);
   const isVertical = orientation === "vertical";
   const showCalendar = showCalendarTrigger && Boolean(onOpenCalendar);
 
-  useEffect(() => {
-    todayRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, []);
+  useLayoutEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    selectedDateRef.current?.scrollIntoView({ block: "center", inline: "center" });
+  }, [visible]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const currentIndex = dates.indexOf(selectedDate);
@@ -114,7 +120,7 @@ export function DateStrip({
             return (
               <button
                 key={dateKey}
-                ref={isToday ? todayRef : undefined}
+                ref={isSelected ? selectedDateRef : undefined}
                 type="button"
                 role="option"
                 aria-pressed={isSelected}

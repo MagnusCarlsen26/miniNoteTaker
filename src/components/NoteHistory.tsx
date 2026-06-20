@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import { Pin } from "lucide-react";
+import { Pin, Plus } from "lucide-react";
 import { MouseEvent, useEffect, useMemo, useState } from "react";
 import { previewContent } from "../lib/notePreview";
 import { useNoteStore } from "../store/noteStore";
@@ -15,6 +15,8 @@ type NoteHistoryProps = {
   timestampField?: "updated_at" | "deleted_at" | "created_at";
   ariaLabel?: string;
   maxVisible?: number;
+  onCreateNote?: () => void;
+  createNoteLabel?: string;
 };
 
 function noteTimestamp(note: Note, timestampField: "updated_at" | "deleted_at" | "created_at") {
@@ -63,7 +65,9 @@ export function NoteHistory({
   emptyTitle,
   timestampField = "updated_at",
   ariaLabel = "Recent notes",
-  maxVisible = 1000
+  maxVisible = 1000,
+  onCreateNote,
+  createNoteLabel = "New note"
 }: NoteHistoryProps) {
   const storeNotes = useNoteStore((state) => state.notes);
   const notes = notesOverride ?? storeNotes;
@@ -89,9 +93,44 @@ export function NoteHistory({
     });
   }, [selectedNoteId, visibleNotes]);
 
+  const header =
+    title || onCreateNote ? (
+      <div className="mb-2 flex items-center justify-between gap-2">
+        {title ? (
+          <div className="min-w-0 truncate text-xs font-medium uppercase text-[#657064] dark:text-[#aeb9aa]">
+            {title}
+          </div>
+        ) : (
+          <span />
+        )}
+        {onCreateNote ? (
+          <button
+            type="button"
+            aria-label={createNoteLabel}
+            onMouseDown={(event) => {
+              if (event.button !== 0) {
+                return;
+              }
+              event.preventDefault();
+              onCreateNote();
+            }}
+            onClick={(event) => event.preventDefault()}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#dce5d8] text-[#2f6b43] transition hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
+          >
+            <Plus size={14} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+    ) : null;
+
   if (visibleNotes.length === 0) {
-    return emptyTitle ? (
-      <div className="text-sm text-[#657064] dark:text-[#aeb9aa]">{emptyTitle}</div>
+    return emptyTitle || header ? (
+      <div>
+        {header}
+        {emptyTitle ? (
+          <div className="text-sm text-[#657064] dark:text-[#aeb9aa]">{emptyTitle}</div>
+        ) : null}
+      </div>
     ) : null;
   }
 
@@ -132,11 +171,7 @@ export function NoteHistory({
         }
       }}
     >
-      {title ? (
-        <div className="mb-2 text-xs font-medium uppercase text-[#657064] dark:text-[#aeb9aa]">
-          {title}
-        </div>
-      ) : null}
+      {header}
       <div className="grid gap-1">
         {visibleNotes.map((note, index) => (
           <button

@@ -5,6 +5,8 @@ import {
   createNote,
   deleteFolder as deleteFolderCommand,
   deleteEmptyNote,
+  getNote,
+  getSetting,
   listArchivedNotes,
   listFolders,
   listNotes,
@@ -15,11 +17,13 @@ import {
   restoreNote as restoreNoteCommand,
   setPinned,
   setNoteFolders,
+  setSetting,
   softDeleteNote as softDeleteNoteCommand,
   unarchiveNote as unarchiveNoteCommand,
-  updateNote
+  updateNote,
+  LAST_OPEN_NOTE_ID_KEY
 } from "../lib/tauri";
-import { localDayBounds } from "../lib/dates";
+import { dateKeyToCreatedAt, localDayBounds } from "../lib/dates";
 import type { Folder, Note, SaveStatus } from "../types/note";
 
 type PendingSave = {
@@ -27,6 +31,7 @@ type PendingSave = {
   content: string;
   pinned?: boolean;
   folderIds?: string[];
+  createdAt?: string;
 };
 
 type NoteState = {
@@ -43,8 +48,10 @@ type NoteState = {
   saveStatus: SaveStatus;
   saveError: string | null;
   pendingSave: PendingSave | null;
+  draftCreatedDate: string | null;
 
   setDraftContent: (content: string) => void;
+  setDraftCreatedDate: (draftCreatedDate: string | null) => void;
   setActiveNote: (note: Note | null) => void;
   loadNotes: (limit?: number) => Promise<void>;
   loadNotesByDate: (date: string, limit?: number) => Promise<void>;
@@ -67,6 +74,8 @@ type NoteState = {
   toggleActiveNoteFolder: (folderId: string) => Promise<Note | null>;
   deleteEmptyActiveNote: () => Promise<void>;
   resetDraft: () => void;
+  persistLastOpenNoteId: () => Promise<void>;
+  restoreLastOpenNote: () => Promise<void>;
 };
 
 function upsertNote(notes: Note[], note: Note): Note[] {
@@ -85,14 +94,15 @@ function pendingFromState(state: NoteState): PendingSave {
     noteId: state.activeNote?.id ?? null,
     content: state.draftContent,
     pinned: state.activeNote?.pinned,
-    folderIds: state.activeNote?.folders.map((folder) => folder.id)
+    folderIds: state.activeNote?.folders.map((folder) => folder.id),
+    createdAt: state.draftCreatedDate ? dateKeyToCreatedAt(state.draftCreatedDate) : undefined
   };
 }
 
 async function persistPendingSave(pendingSave: PendingSave): Promise<Note> {
   let note = pendingSave.noteId
     ? await updateNote(pendingSave.noteId, pendingSave.content)
-    : await createNote(pendingSave.content);
+    : await createNote(pendingSave.content, pendingSave.createdAt);
 
   if (typeof pendingSave.pinned === "boolean" && note.pinned !== pendingSave.pinned) {
     note = await setPinned(note.id, pendingSave.pinned);
@@ -119,6 +129,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
   saveStatus: "idle",
   saveError: null,
   pendingSave: null,
+  draftCreatedDate: null,
 
   setDraftContent: (content) =>
     set((state) => ({
@@ -127,14 +138,20 @@ export const useNoteStore = create<NoteState>((set, get) => ({
       saveError: content !== state.draftContent ? null : state.saveError
     })),
 
-  setActiveNote: (note) =>
+  setDraftCreatedDate: (draftCreatedDate) => set({ draftCreatedDate }),
+
+  setActiveNote: (note) => {
     set({
       activeNote: note,
       draftContent: note?.content ?? "",
       saveStatus: "idle",
       saveError: null,
       pendingSave: null
-    }),
+    });
+    if (note) {
+      void get().persistLastOpenNoteId();
+    }
+  },
 
   loadNotes: async (limit) => {
     const notes = await listNotes(limit);
@@ -340,14 +357,16 @@ export const useNoteStore = create<NoteState>((set, get) => ({
 
     try {
       set({ saveStatus: "saving", saveError: null });
+      const createdAt = state.draftCreatedDate ? dateKeyToCreatedAt(state.draftCreatedDate) : undefined;
       const note = state.activeNote
         ? await updateNote(state.activeNote.id, state.draftContent)
-        : await createNote(state.draftContent);
+        : await createNote(state.draftContent, createdAt);
 
       set((current) => ({
         activeNote: note,
         draftContent: current.draftContent,
         notes: upsertNote(current.notes, note),
+        draftCreatedDate: null,
         saveStatus: "saved",
         saveError: null,
         pendingSave: null
@@ -379,6 +398,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         draftContent: state.draftContent,
         notes: upsertNote(state.notes, note),
         folders,
+        draftCreatedDate: null,
         saveStatus: "saved",
         saveError: null,
         pendingSave: null
@@ -507,8 +527,42 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     set({
       activeNote: null,
       draftContent: "",
+      draftCreatedDate: null,
       saveStatus: "idle",
       saveError: null,
       pendingSave: null
-    })
+    }),
+
+  persistLastOpenNoteId: async () => {
+    const { activeNote } = get();
+    if (!activeNote) {
+      return;
+    }
+    await setSetting(LAST_OPEN_NOTE_ID_KEY, activeNote.id);
+  },
+
+  restoreLastOpenNote: async () => {
+    const state = get();
+    if (state.activeNote || state.draftContent.length > 0) {
+      return;
+    }
+
+    const savedId = await getSetting(LAST_OPEN_NOTE_ID_KEY);
+    if (!savedId) {
+      return;
+    }
+
+    const note = await getNote(savedId);
+    if (!note) {
+      return;
+    }
+
+    set({
+      activeNote: note,
+      draftContent: note.content,
+      saveStatus: "idle",
+      saveError: null,
+      pendingSave: null
+    });
+  }
 }));

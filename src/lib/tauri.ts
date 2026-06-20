@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Folder, Note } from "../types/note";
 
+export const LAST_OPEN_NOTE_ID_KEY = "editor.lastNoteId";
+
 export function showOverlay(): Promise<void> {
   return invoke<void>("show_overlay");
 }
@@ -37,8 +39,8 @@ export function quitApp(): Promise<void> {
   return invoke<void>("quit_app");
 }
 
-export function createNote(content: string): Promise<Note> {
-  return invoke<Note>("create_note", { content });
+export function createNote(content: string, createdAt?: string): Promise<Note> {
+  return invoke<Note>("create_note", { content, created_at: createdAt ?? null });
 }
 
 export function updateNote(id: string, content: string): Promise<Note> {

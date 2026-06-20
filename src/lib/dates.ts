@@ -37,6 +37,10 @@ export function formatSelectedDateHeader(dateKey: string): string {
   return dayjs(dateKey).format("ddd, MMM D");
 }
 
+export function dateKeyToCreatedAt(dateKey: string): string {
+  return dayjs(dateKey).startOf("day").add(12, "hour").toISOString();
+}
+
 export const CALENDAR_WEEK_ROWS = 6;
 
 export function buildMonthWeeks(month: Dayjs, weekRows = CALENDAR_WEEK_ROWS): string[][] {

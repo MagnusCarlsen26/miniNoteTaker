@@ -91,19 +91,19 @@ impl Database {
         })
     }
 
-    pub fn create_note(&self, content: String) -> Result<NoteDto, AppError> {
+    pub fn create_note(&self, content: String, created_at: Option<String>) -> Result<NoteDto, AppError> {
         if content.trim().is_empty() {
             return Err(AppError::EmptyNote);
         }
 
         let id = Uuid::new_v4().to_string();
-        let now = now_timestamp();
+        let timestamp = created_at.unwrap_or_else(now_timestamp);
         let connection = self.lock_connection();
 
         connection.execute(
             "INSERT INTO notes (id, content, pinned, created_at, updated_at)
              VALUES (?1, ?2, 0, ?3, ?3)",
-            params![id, content, now],
+            params![id, content, timestamp],
         )?;
         drop(connection);
 
@@ -846,7 +846,7 @@ mod tests {
     #[test]
     fn create_note_inserts_non_empty_note() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("hello".to_string()).unwrap();
+        let note = database.create_note("hello".to_string(), None).unwrap();
 
         assert_eq!(note.content, "hello");
         assert!(!note.pinned);
@@ -858,15 +858,26 @@ mod tests {
     #[test]
     fn create_note_rejects_whitespace_only_content() {
         let database = Database::new_in_memory().unwrap();
-        let result = database.create_note("   \n\t".to_string());
+        let result = database.create_note("   \n\t".to_string(), None);
 
         assert!(matches!(result, Err(AppError::EmptyNote)));
     }
 
     #[test]
+    fn create_note_uses_provided_created_at() {
+        let database = Database::new_in_memory().unwrap();
+        let note = database
+            .create_note("dated".to_string(), Some("2026-06-08T12:00:00Z".to_string()))
+            .unwrap();
+
+        assert_eq!(note.created_at, "2026-06-08T12:00:00Z");
+        assert_eq!(note.updated_at, "2026-06-08T12:00:00Z");
+    }
+
+    #[test]
     fn update_note_changes_content_and_updated_at() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("before".to_string()).unwrap();
+        let note = database.create_note("before".to_string(), None).unwrap();
         thread::sleep(Duration::from_millis(2));
 
         let updated = database
@@ -888,11 +899,11 @@ mod tests {
     #[test]
     fn list_notes_returns_pinned_first_then_newest_updated() {
         let database = Database::new_in_memory().unwrap();
-        let first = database.create_note("first".to_string()).unwrap();
+        let first = database.create_note("first".to_string(), None).unwrap();
         thread::sleep(Duration::from_millis(2));
-        let second = database.create_note("second".to_string()).unwrap();
+        let second = database.create_note("second".to_string(), None).unwrap();
         thread::sleep(Duration::from_millis(2));
-        let third = database.create_note("third".to_string()).unwrap();
+        let third = database.create_note("third".to_string(), None).unwrap();
 
         database.set_pinned(first.id.clone(), true).unwrap();
         database.set_pinned(third.id.clone(), true).unwrap();
@@ -913,7 +924,7 @@ mod tests {
     fn list_notes_caps_limit_at_one_thousand() {
         let database = Database::new_in_memory().unwrap();
         for index in 0..1005 {
-            database.create_note(format!("note {index}")).unwrap();
+            database.create_note(format!("note {index}"), None).unwrap();
         }
 
         let notes = database.list_notes(Some(5000)).unwrap();
@@ -925,7 +936,7 @@ mod tests {
     fn list_notes_respects_small_caller_limit() {
         let database = Database::new_in_memory().unwrap();
         for index in 0..5 {
-            database.create_note(format!("note {index}")).unwrap();
+            database.create_note(format!("note {index}"), None).unwrap();
         }
 
         let notes = database.list_notes(Some(2)).unwrap();
@@ -944,7 +955,7 @@ mod tests {
     #[test]
     fn set_pinned_persists_pinned_state() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("pin me".to_string()).unwrap();
+        let note = database.create_note("pin me".to_string(), None).unwrap();
 
         let pinned = database.set_pinned(note.id.clone(), true).unwrap();
         let fetched = database.get_note(note.id).unwrap().unwrap();
@@ -964,11 +975,11 @@ mod tests {
     #[test]
     fn delete_empty_note_removes_only_whitespace_content_notes() {
         let database = Database::new_in_memory().unwrap();
-        let empty = database.create_note("not empty yet".to_string()).unwrap();
+        let empty = database.create_note("not empty yet".to_string(), None).unwrap();
         database
             .update_note(empty.id.clone(), "   \n".to_string())
             .unwrap();
-        let non_empty = database.create_note("keep".to_string()).unwrap();
+        let non_empty = database.create_note("keep".to_string(), None).unwrap();
 
         database.delete_empty_note(empty.id.clone()).unwrap();
         database.delete_empty_note(non_empty.id.clone()).unwrap();
@@ -987,7 +998,7 @@ mod tests {
     #[test]
     fn soft_delete_note_hides_note_from_list_and_get() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("trash me".to_string()).unwrap();
+        let note = database.create_note("trash me".to_string(), None).unwrap();
 
         database.soft_delete_note(note.id.clone()).unwrap();
 
@@ -999,7 +1010,7 @@ mod tests {
     #[test]
     fn restore_note_returns_note_to_active_lists() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("restore me".to_string()).unwrap();
+        let note = database.create_note("restore me".to_string(), None).unwrap();
         database.soft_delete_note(note.id.clone()).unwrap();
 
         let restored = database.restore_note(note.id.clone()).unwrap();
@@ -1014,7 +1025,7 @@ mod tests {
     #[test]
     fn permanently_delete_note_removes_trashed_note() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("delete me".to_string()).unwrap();
+        let note = database.create_note("delete me".to_string(), None).unwrap();
         database.soft_delete_note(note.id.clone()).unwrap();
 
         database.permanently_delete_note(note.id.clone()).unwrap();
@@ -1101,7 +1112,7 @@ mod tests {
     #[test]
     fn assigns_multiple_folders_to_note() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("file me".to_string()).unwrap();
+        let note = database.create_note("file me".to_string(), None).unwrap();
         let work = database.create_folder("Work".to_string()).unwrap();
         let home = database.create_folder("Home".to_string()).unwrap();
 
@@ -1120,7 +1131,7 @@ mod tests {
     #[test]
     fn removing_all_folders_leaves_note_unfiled() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("file me".to_string()).unwrap();
+        let note = database.create_note("file me".to_string(), None).unwrap();
         let folder = database.create_folder("Work".to_string()).unwrap();
         database
             .set_note_folders(note.id.clone(), vec![folder.id])
@@ -1134,8 +1145,8 @@ mod tests {
     #[test]
     fn listing_notes_by_folder_returns_only_matching_notes() {
         let database = Database::new_in_memory().unwrap();
-        let matching = database.create_note("matching".to_string()).unwrap();
-        let other = database.create_note("other".to_string()).unwrap();
+        let matching = database.create_note("matching".to_string(), None).unwrap();
+        let other = database.create_note("other".to_string(), None).unwrap();
         let folder = database.create_folder("Work".to_string()).unwrap();
         database
             .set_note_folders(matching.id.clone(), vec![folder.id.clone()])
@@ -1151,8 +1162,8 @@ mod tests {
     #[test]
     fn folder_note_counts_are_correct() {
         let database = Database::new_in_memory().unwrap();
-        let first = database.create_note("first".to_string()).unwrap();
-        let second = database.create_note("second".to_string()).unwrap();
+        let first = database.create_note("first".to_string(), None).unwrap();
+        let second = database.create_note("second".to_string(), None).unwrap();
         let folder = database.create_folder("Work".to_string()).unwrap();
         database
             .set_note_folders(first.id, vec![folder.id.clone()])
@@ -1169,7 +1180,7 @@ mod tests {
     #[test]
     fn list_notes_by_folder_excludes_trashed_notes() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("filed".to_string()).unwrap();
+        let note = database.create_note("filed".to_string(), None).unwrap();
         let folder = database.create_folder("Work".to_string()).unwrap();
         database
             .set_note_folders(note.id.clone(), vec![folder.id.clone()])
@@ -1187,7 +1198,7 @@ mod tests {
     #[test]
     fn deleting_folder_with_notes_moves_those_notes_to_trash() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("delete me".to_string()).unwrap();
+        let note = database.create_note("delete me".to_string(), None).unwrap();
         let folder = database.create_folder("Work".to_string()).unwrap();
         database
             .set_note_folders(note.id.clone(), vec![folder.id.clone()])
@@ -1203,7 +1214,7 @@ mod tests {
     #[test]
     fn deleting_folder_with_shared_notes_moves_shared_notes_to_trash() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("shared".to_string()).unwrap();
+        let note = database.create_note("shared".to_string(), None).unwrap();
         let work = database.create_folder("Work".to_string()).unwrap();
         let home = database.create_folder("Home".to_string()).unwrap();
         database
@@ -1261,7 +1272,7 @@ mod tests {
     #[test]
     fn archive_note_hides_note_from_recent_lists() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("archive me".to_string()).unwrap();
+        let note = database.create_note("archive me".to_string(), None).unwrap();
         database.set_pinned(note.id.clone(), true).unwrap();
 
         let archived = database.archive_note(note.id.clone()).unwrap();
@@ -1276,7 +1287,7 @@ mod tests {
     #[test]
     fn unarchive_note_restores_note_to_recent_lists() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("restore archive".to_string()).unwrap();
+        let note = database.create_note("restore archive".to_string(), None).unwrap();
         database.archive_note(note.id.clone()).unwrap();
 
         let restored = database.unarchive_note(note.id.clone()).unwrap();
@@ -1291,7 +1302,7 @@ mod tests {
     #[test]
     fn lifecycle_transitions_preserve_created_and_updated_at() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("lifecycle".to_string()).unwrap();
+        let note = database.create_note("lifecycle".to_string(), None).unwrap();
         database
             .set_created_at_for_test(&note.id, "2026-06-01T10:00:00Z")
             .unwrap();
@@ -1325,7 +1336,7 @@ mod tests {
     #[test]
     fn list_notes_by_folder_excludes_archived_notes() {
         let database = Database::new_in_memory().unwrap();
-        let note = database.create_note("filed".to_string()).unwrap();
+        let note = database.create_note("filed".to_string(), None).unwrap();
         let folder = database.create_folder("Work".to_string()).unwrap();
         database
             .set_note_folders(note.id.clone(), vec![folder.id.clone()])
@@ -1363,8 +1374,8 @@ mod tests {
     #[test]
     fn list_notes_by_created_date_returns_notes_within_day_bounds() {
         let database = Database::new_in_memory().unwrap();
-        let in_day = database.create_note("today note".to_string()).unwrap();
-        let next_day = database.create_note("tomorrow note".to_string()).unwrap();
+        let in_day = database.create_note("today note".to_string(), None).unwrap();
+        let next_day = database.create_note("tomorrow note".to_string(), None).unwrap();
         database
             .set_created_at_for_test(&in_day.id, "2026-06-08T14:30:00Z")
             .unwrap();
@@ -1387,9 +1398,9 @@ mod tests {
     #[test]
     fn list_notes_by_created_date_excludes_trashed_and_archived_notes() {
         let database = Database::new_in_memory().unwrap();
-        let active = database.create_note("active".to_string()).unwrap();
-        let trashed = database.create_note("trashed".to_string()).unwrap();
-        let archived = database.create_note("archived".to_string()).unwrap();
+        let active = database.create_note("active".to_string(), None).unwrap();
+        let trashed = database.create_note("trashed".to_string(), None).unwrap();
+        let archived = database.create_note("archived".to_string(), None).unwrap();
         let start = "2026-06-08T00:00:00Z".to_string();
         let end = "2026-06-09T00:00:00Z".to_string();
 
@@ -1413,8 +1424,8 @@ mod tests {
     #[test]
     fn list_notes_by_created_date_orders_pinned_first_then_newest_created() {
         let database = Database::new_in_memory().unwrap();
-        let older = database.create_note("older".to_string()).unwrap();
-        let newer = database.create_note("newer".to_string()).unwrap();
+        let older = database.create_note("older".to_string(), None).unwrap();
+        let newer = database.create_note("newer".to_string(), None).unwrap();
         database
             .set_created_at_for_test(&older.id, "2026-06-08T10:00:00Z")
             .unwrap();

@@ -55,8 +55,12 @@ pub fn quit_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-pub fn create_note(database: tauri::State<Database>, content: String) -> Result<NoteDto, AppError> {
-    database.create_note(content)
+pub fn create_note(
+    database: tauri::State<Database>,
+    content: String,
+    created_at: Option<String>,
+) -> Result<NoteDto, AppError> {
+    database.create_note(content, created_at)
 }
 
 #[tauri::command]
