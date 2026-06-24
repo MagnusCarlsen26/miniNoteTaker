@@ -30,6 +30,7 @@ import { formatSelectedDateHeader, noteCountsByDate } from "../lib/dates";
 import { previewContent } from "../lib/notePreview";
 import { shouldUseDarkTheme } from "../lib/theme";
 import { useAppShortcuts } from "../hooks/useAppShortcuts";
+import { useZoomShortcuts } from "../hooks/useZoomShortcuts";
 import { useAutosaveNote } from "../hooks/useAutosaveNote";
 import { useNoteStore } from "../store/noteStore";
 import { useUiStore } from "../store/uiStore";
@@ -186,6 +187,7 @@ export function OverlayEditor() {
       return false;
     }
   });
+  useZoomShortcuts();
 
   const noteTimestamp = useMemo(() => {
     if (!activeNote) {
@@ -469,6 +471,7 @@ export function OverlayEditor() {
   const handleCreateNoteOnSelectedDate = useCallback(() => {
     setDraftCreatedDate(selectedDate);
     resetDraft();
+    setEditorDayNotesOpen(false);
     setViewMode("editor");
     window.requestAnimationFrame(focusEditor);
   }, [focusEditor, resetDraft, selectedDate, setDraftCreatedDate, setViewMode]);
@@ -497,10 +500,6 @@ export function OverlayEditor() {
           <div className="relative min-h-0 flex-1">
             {editorDayNotesOpen ? (
               <div className="flex h-full min-h-0 flex-col rounded-md border border-[#dce5d8] bg-[#fbfdfb] p-3 dark:border-[#2c3628] dark:bg-[#141b12]">
-                <div className="mb-2 shrink-0 text-xs font-medium uppercase tracking-[0.12em] text-[#657064] dark:text-[#aeb9aa]">
-                  {formatSelectedDateHeader(selectedDate)} · {notesByDate.length}{" "}
-                  {notesByDate.length === 1 ? "note" : "notes"}
-                </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   <NoteHistory
                     selectedNoteId={selectedHistoryNoteId}
@@ -510,10 +509,12 @@ export function OverlayEditor() {
                       openNoteInEditor(note);
                     }}
                     notesOverride={notesByDate}
-                    title=""
+                    title={`${formatSelectedDateHeader(selectedDate)} · ${notesByDate.length} ${notesByDate.length === 1 ? "note" : "notes"}`}
                     emptyTitle={`No notes created on ${formatSelectedDateHeader(selectedDate)}`}
                     timestampField="created_at"
                     ariaLabel={`Notes created on ${formatSelectedDateHeader(selectedDate)}`}
+                    onCreateNote={handleCreateNoteOnSelectedDate}
+                    createNoteLabel={`New note on ${formatSelectedDateHeader(selectedDate)}`}
                   />
                 </div>
               </div>
