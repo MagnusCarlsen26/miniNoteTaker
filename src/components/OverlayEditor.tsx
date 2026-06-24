@@ -558,73 +558,6 @@ export function OverlayEditor() {
             </div>
           ) : null}
 
-          {!editorDayNotesOpen ? (
-          <div className="relative shrink-0">
-            <div className="flex min-h-8 items-center gap-1 overflow-x-auto pb-1">
-              {folders.map((folder) => {
-                const selected = activeFolderIds.has(folder.id);
-                return (
-                  <button
-                    key={folder.id}
-                    type="button"
-                    aria-pressed={selected}
-                    title={folder.name}
-                    onMouseDown={(event) => handleMouseDownAction(event, () => void toggleActiveNoteFolder(folder.id))}
-                    onClick={(event) => event.preventDefault()}
-                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-[#d2ddce] bg-[#fbfdfb] px-2 text-xs font-medium text-[#536150] transition hover:border-[#9fb794] hover:bg-[#eef4ec] aria-pressed:border-[#2f6b43] aria-pressed:bg-[#dfeede] aria-pressed:text-[#255736] dark:border-[#2c3628] dark:bg-[#141b12] dark:text-[#b8c7b4] dark:hover:border-[#4e6846] dark:hover:bg-[#202a1d] dark:aria-pressed:border-[#76b774] dark:aria-pressed:bg-[#24351f] dark:aria-pressed:text-[#b9e8b1]"
-                  >
-                    <Folder size={12} aria-hidden="true" />
-                    <span className="max-w-14">{compactFolderName(folder.name)}</span>
-                    {selected ? <Check size={12} aria-hidden="true" /> : null}
-                  </button>
-                );
-              })}
-              <div ref={folderPanelRef} className="relative shrink-0">
-                <button
-                  type="button"
-                  aria-label="Create folder"
-                  onMouseDown={(event) => handleMouseDownAction(event, () => setFolderPanelOpen((open) => !open))}
-                  onClick={(event) => event.preventDefault()}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#dce5d8] text-[#2f6b43] hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
-                >
-                  <Plus size={14} aria-hidden="true" />
-                </button>
-                {folderPanelOpen ? (
-                  <div className="absolute bottom-9 left-0 z-10 w-60 rounded-md border border-[#dce5d8] bg-[#fbfdfb] p-2 shadow-lg dark:border-[#2c3628] dark:bg-[#141b12]">
-                <div className="flex items-center gap-1">
-                  <input
-                    value={newFolderName}
-                    onChange={(event) => setNewFolderName(event.target.value)}
-                    onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void createAndAssignFolder();
-                      }
-                      if (event.key === "Escape") {
-                        setFolderPanelOpen(false);
-                        window.requestAnimationFrame(focusEditor);
-                      }
-                    }}
-                    placeholder="New folder"
-                    className="min-w-0 flex-1 rounded border border-[#dce5d8] bg-transparent px-2 py-1 text-sm outline-none dark:border-[#2c3628]"
-                  />
-                  <button
-                    type="button"
-                    aria-label="Create folder"
-                    onMouseDown={(event) => handleMouseDownAction(event, () => void createAndAssignFolder())}
-                    onClick={(event) => event.preventDefault()}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white"
-                  >
-                    <Plus size={14} aria-hidden="true" />
-                  </button>
-                  </div>
-                </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          ) : null}
-
           </div>
           <div
             ref={editorDateRailRef}
@@ -640,14 +573,76 @@ export function OverlayEditor() {
               visible={isOverlayVisible}
             />
           </div>
-          <footer className="col-span-2 row-start-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#dce5d8] px-4 pt-2 dark:border-[#2c3628]">
-            <ShortcutHint keys="Esc" label={editorDayNotesOpen ? "Back" : "Close"} />
-            <ShortcutHint keys="Ctrl N" label="New" />
+          <footer className="col-span-2 row-start-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#dce5d8] px-4 py-2 dark:border-[#2c3628]">
+            {!editorDayNotesOpen ? (
+              <div className="relative flex min-h-8 min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+                {folders.map((folder) => {
+                  const selected = activeFolderIds.has(folder.id);
+                  return (
+                    <button
+                      key={folder.id}
+                      type="button"
+                      aria-pressed={selected}
+                      title={folder.name}
+                      onMouseDown={(event) => handleMouseDownAction(event, () => void toggleActiveNoteFolder(folder.id))}
+                      onClick={(event) => event.preventDefault()}
+                      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-[#d2ddce] bg-[#fbfdfb] px-2 text-xs font-medium text-[#536150] transition hover:border-[#9fb794] hover:bg-[#eef4ec] aria-pressed:border-[#2f6b43] aria-pressed:bg-[#dfeede] aria-pressed:text-[#255736] dark:border-[#2c3628] dark:bg-[#141b12] dark:text-[#b8c7b4] dark:hover:border-[#4e6846] dark:hover:bg-[#202a1d] dark:aria-pressed:border-[#76b774] dark:aria-pressed:bg-[#24351f] dark:aria-pressed:text-[#b9e8b1]"
+                    >
+                      <Folder size={12} aria-hidden="true" />
+                      <span className="max-w-14">{compactFolderName(folder.name)}</span>
+                      {selected ? <Check size={12} aria-hidden="true" /> : null}
+                    </button>
+                  );
+                })}
+                <div ref={folderPanelRef} className="relative shrink-0">
+                  <button
+                    type="button"
+                    aria-label="Create folder"
+                    onMouseDown={(event) => handleMouseDownAction(event, () => setFolderPanelOpen((open) => !open))}
+                    onClick={(event) => event.preventDefault()}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#dce5d8] text-[#2f6b43] hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                  </button>
+                  {folderPanelOpen ? (
+                    <div className="absolute bottom-full left-0 z-10 mb-1 w-60 rounded-md border border-[#dce5d8] bg-[#fbfdfb] p-2 shadow-lg dark:border-[#2c3628] dark:bg-[#141b12]">
+                      <div className="flex items-center gap-1">
+                        <input
+                          value={newFolderName}
+                          onChange={(event) => setNewFolderName(event.target.value)}
+                          onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void createAndAssignFolder();
+                            }
+                            if (event.key === "Escape") {
+                              setFolderPanelOpen(false);
+                              window.requestAnimationFrame(focusEditor);
+                            }
+                          }}
+                          placeholder="New folder"
+                          className="min-w-0 flex-1 rounded border border-[#dce5d8] bg-transparent px-2 py-1 text-sm outline-none dark:border-[#2c3628]"
+                        />
+                        <button
+                          type="button"
+                          aria-label="Create folder"
+                          onMouseDown={(event) => handleMouseDownAction(event, () => void createAndAssignFolder())}
+                          onClick={(event) => event.preventDefault()}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#2f6b43] text-white"
+                        >
+                          <Plus size={14} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             <ShortcutHint keys="Ctrl P" label="Pin" />
             {pendingSave ? (
-              <span className="text-xs text-[#8a5a2a] dark:text-[#f0c48d]">Local draft</span>
+              <span className="shrink-0 text-xs text-[#8a5a2a] dark:text-[#f0c48d]">Local draft</span>
             ) : null}
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               <button
                 type="button"
                 data-calendar-trigger
