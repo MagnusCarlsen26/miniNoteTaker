@@ -21,13 +21,12 @@ pub fn center_overlay(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_window_size(
+pub fn persist_window_size_for_mode(
+    app: tauri::AppHandle,
     database: tauri::State<Database>,
-    width: u32,
-    height: u32,
-) -> Result<(), AppError> {
-    database.set_setting("window.width".to_string(), width.to_string())?;
-    database.set_setting("window.height".to_string(), height.to_string())
+    mode: String,
+) -> Result<(), String> {
+    crate::window::persist_window_size_for_mode(&app, &database, &mode).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

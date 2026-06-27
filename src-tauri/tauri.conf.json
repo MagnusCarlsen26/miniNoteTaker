@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "Quicknote",
-        "width": 600,
-        "height": 400,
+        "width": 1200,
+        "height": 800,
         "decorations": false,
         "alwaysOnTop": true,
         "resizable": true,

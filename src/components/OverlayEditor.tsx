@@ -1,6 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import dayjs from "dayjs";
 import {
   Archive,
@@ -23,11 +23,11 @@ import {
   getShortcutFailure,
   hideOverlay,
   quitApp,
-  registerShortcut,
-  saveWindowSize
+  registerShortcut
 } from "../lib/tauri";
 import { formatSelectedDateHeader, noteCountsByDate } from "../lib/dates";
 import { previewContent } from "../lib/notePreview";
+import { applyWindowSize, persistCurrentWindowSizeForMode } from "../lib/windowSize";
 import { shouldUseDarkTheme } from "../lib/theme";
 import { useAppShortcuts } from "../hooks/useAppShortcuts";
 import { useZoomShortcuts } from "../hooks/useZoomShortcuts";
@@ -72,9 +72,6 @@ function compactFolderName(name: string) {
   const trimmed = name.trim();
   return trimmed.length > 6 ? `${trimmed.slice(0, 6)}...` : trimmed;
 }
-
-const EDITOR_WINDOW_SIZE = new LogicalSize(660, 400);
-const DASHBOARD_WINDOW_SIZE = new LogicalSize(920, 560);
 
 export function OverlayEditor() {
   const editorViewRef = useRef<EditorView | null>(null);
@@ -155,21 +152,16 @@ export function OverlayEditor() {
   const closeOverlay = useCallback(async () => {
     setLastCursorPosition(getCursorPosition());
     await flushSave();
-    try {
-      const { width, height } = await getCurrentWindow().outerSize();
-      await saveWindowSize(width, height);
-    } catch {
-      // Window size persistence should never block closing the overlay.
-    }
+    await persistCurrentWindowSizeForMode(viewMode);
     await persistLastOpenNoteId();
     resetDraft();
     setSelectedHistoryNoteId(null);
     setEditorDayNotesOpen(false);
     setCalendarPickerOpen(false);
-    setViewMode("editor");
     await hideOverlay();
     setOverlayVisible(false);
-  }, [flushSave, getCursorPosition, persistLastOpenNoteId, resetDraft, setLastCursorPosition, setOverlayVisible, setSelectedHistoryNoteId, setViewMode]);
+    setViewMode("editor");
+  }, [flushSave, getCursorPosition, persistLastOpenNoteId, resetDraft, setLastCursorPosition, setOverlayVisible, setSelectedHistoryNoteId, setViewMode, viewMode]);
 
   useAppShortcuts({
     getCursorPosition,
@@ -248,18 +240,38 @@ export function OverlayEditor() {
   }, [focusEditor, restoreLastOpenNote, setOverlayVisible, setShortcutFailure]);
 
   useEffect(() => {
-    const window = getCurrentWindow();
-    const nextSize = viewMode === "home" ? DASHBOARD_WINDOW_SIZE : EDITOR_WINDOW_SIZE;
+    if (!isOverlayVisible) {
+      return;
+    }
 
-    void (async () => {
-      try {
-        await window.setSize(nextSize);
-        await window.center();
-      } catch {
-        // Window resize/center should not interrupt overlay usage.
+    void applyWindowSize(viewMode);
+  }, [isOverlayVisible, viewMode]);
+
+  useEffect(() => {
+    if (!isOverlayVisible) {
+      return;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const window = getCurrentWindow();
+    const unlistenPromise = window.onResized(() => {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
       }
-    })();
-  }, [viewMode]);
+
+      timeoutId = setTimeout(() => {
+        void persistCurrentWindowSizeForMode(useUiStore.getState().viewMode);
+      }, 300);
+    });
+
+    return () => {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [isOverlayVisible]);
 
   useEffect(() => {
     void getRegisteredShortcut()

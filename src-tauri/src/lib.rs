@@ -23,7 +23,7 @@ pub fn run() {
             commands::show_overlay,
             commands::hide_overlay,
             commands::center_overlay,
-            commands::save_window_size,
+            commands::persist_window_size_for_mode,
             commands::register_shortcut,
             commands::get_registered_shortcut,
             commands::get_shortcut_failure,

@@ -15,8 +15,8 @@ export function centerOverlay(): Promise<void> {
   return invoke<void>("center_overlay");
 }
 
-export function saveWindowSize(width: number, height: number): Promise<void> {
-  return invoke<void>("save_window_size", { width, height });
+export function persistWindowSizeForMode(mode: "editor" | "home"): Promise<void> {
+  return invoke<void>("persist_window_size_for_mode", { mode });
 }
 
 export function appReady(): Promise<string> {
