@@ -4,13 +4,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDateRange, todayDateKey } from "../lib/dates";
 import { DateStrip } from "./DateStrip";
 
+let resizeObserverCallback: ResizeObserverCallback | null = null;
+
+class ResizeObserverMock {
+  constructor(callback: ResizeObserverCallback) {
+    resizeObserverCallback = callback;
+  }
+
+  observe() {}
+
+  disconnect() {
+    resizeObserverCallback = null;
+  }
+}
+
 describe("DateStrip", () => {
   beforeEach(() => {
-    HTMLElement.prototype.scrollIntoView = vi.fn();
+    resizeObserverCallback = null;
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
   });
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it("renders a seven-day window around today in the strip", () => {
@@ -52,10 +68,8 @@ describe("DateStrip", () => {
     expect(onSelectDate).toHaveBeenCalledWith(tomorrow);
   });
 
-  it("centers selected date on mount", () => {
+  it("recenters selected date when the strip is resized", () => {
     const today = todayDateKey();
-    const scrollIntoView = vi.fn();
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
 
     render(
       <DateStrip
@@ -63,17 +77,25 @@ describe("DateStrip", () => {
         selectedDate={today}
         onSelectDate={() => undefined}
         noteCounts={{}}
-        onOpenCalendar={() => undefined}
+        visible
       />
     );
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", inline: "center" });
+    const listbox = screen.getByRole("listbox");
+    const selectedButton = screen.getByLabelText(dayjs(today).format("dddd, MMMM D"));
+
+    Object.defineProperty(listbox, "clientHeight", { configurable: true, value: 200 });
+    Object.defineProperty(listbox, "scrollHeight", { configurable: true, value: 1000 });
+    Object.defineProperty(selectedButton, "offsetTop", { configurable: true, value: 480 });
+    Object.defineProperty(selectedButton, "offsetHeight", { configurable: true, value: 40 });
+
+    resizeObserverCallback?.([], {} as ResizeObserver);
+
+    expect(listbox.scrollTop).toBe(400);
   });
 
   it("recenters selected date when overlay becomes visible again", () => {
     const today = todayDateKey();
-    const scrollIntoView = vi.fn();
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
 
     const { rerender } = render(
       <DateStrip
@@ -85,8 +107,6 @@ describe("DateStrip", () => {
       />
     );
 
-    expect(scrollIntoView).not.toHaveBeenCalled();
-
     rerender(
       <DateStrip
         orientation="vertical"
@@ -97,6 +117,16 @@ describe("DateStrip", () => {
       />
     );
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", inline: "center" });
+    const listbox = screen.getByRole("listbox");
+    const selectedButton = screen.getByLabelText(dayjs(today).format("dddd, MMMM D"));
+
+    Object.defineProperty(listbox, "clientHeight", { configurable: true, value: 200 });
+    Object.defineProperty(listbox, "scrollHeight", { configurable: true, value: 1000 });
+    Object.defineProperty(selectedButton, "offsetTop", { configurable: true, value: 480 });
+    Object.defineProperty(selectedButton, "offsetHeight", { configurable: true, value: 40 });
+
+    resizeObserverCallback?.([], {} as ResizeObserver);
+
+    expect(listbox.scrollTop).toBe(400);
   });
 });

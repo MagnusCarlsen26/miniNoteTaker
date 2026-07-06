@@ -2,6 +2,7 @@ import dayjs from "dayjs";
 import { Calendar } from "lucide-react";
 import { KeyboardEvent, MouseEvent, useLayoutEffect, useMemo, useRef } from "react";
 import { buildDateRange, todayDateKey } from "../lib/dates";
+import { centerSelectedDateInStrip } from "../lib/dateStripScroll";
 
 type DateStripProps = {
   orientation: "vertical" | "horizontal";
@@ -43,8 +44,29 @@ export function DateStrip({
       return;
     }
 
-    selectedDateRef.current?.scrollIntoView({ block: "center", inline: "center" });
-  }, [visible]);
+    const container = scrollRef.current;
+    const selected = selectedDateRef.current;
+    if (!container || !selected) {
+      return;
+    }
+
+    const center = () => {
+      const scrollContainer = scrollRef.current;
+      const selectedElement = selectedDateRef.current;
+      if (!scrollContainer || !selectedElement) {
+        return;
+      }
+
+      centerSelectedDateInStrip(scrollContainer, selectedElement, orientation);
+    };
+
+    center();
+
+    const observer = new ResizeObserver(center);
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, [visible, selectedDate, orientation]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const currentIndex = dates.indexOf(selectedDate);
