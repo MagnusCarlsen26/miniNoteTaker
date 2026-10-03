@@ -6,3 +6,14 @@ src-tauri/target/
 *.log
 *.lockb
 
+
+# Expo mobile build output and local state
+mobile/.expo/
+mobile/android/
+mobile/ios/
+mobile/dist/
+*.apk
+*.aab
+*.db
+*.db-wal
+*.db-shm
