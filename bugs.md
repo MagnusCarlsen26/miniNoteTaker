@@ -1,4 +1,4 @@
-1. Shortcut is not working in linux. Not sure about windows and linux.
-2. Warnings whever unsaved changes are erased.
-3. auto save is only user closes. not when user navigates around or pauses typing.
-4. delete ux is bad. i have to scroll to the bottom to delete. also no multiple delete.
+1. Auto save on every key stroke. ofcourse debounce it...but autosave.
+2. doesn't automatically open the last written note.
+3. sidebar doesn't automatically scroll to the current date when opening the app for first time.
+4. automatically mark note as work by default when creating a new note.
