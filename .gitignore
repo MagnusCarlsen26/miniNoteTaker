@@ -17,3 +17,4 @@ mobile/dist/
 *.db
 *.db-wal
 *.db-shm
+mobile/modules/quicknote-todo/android/build/

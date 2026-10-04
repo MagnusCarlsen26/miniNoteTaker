@@ -1,5 +1,5 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="16dp" android:orientation="vertical" android:background="@drawable/todo_light">
-<TextView android:layout_width="match_parent" android:layout_height="48dp" android:text="Todo · 2" android:textSize="20sp" android:textStyle="bold" android:textColor="#172d21"/>
-<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="• Buy groceries\n   Milk, bread, and coffee" android:textSize="16sp" android:textColor="#172d21"/>
-<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="• Call the electrician\n   Ask about Saturday availability" android:textSize="16sp" android:textColor="#172d21"/>
+<TextView android:layout_width="match_parent" android:layout_height="48dp" android:text="Todo · 2                    +" android:textSize="20sp" android:textStyle="bold" android:textColor="#172d21"/>
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="○  Buy groceries\n   Milk, bread, and coffee" android:textSize="16sp" android:textColor="#172d21"/>
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="○  Call the electrician\n   Ask about Saturday availability" android:textSize="16sp" android:textColor="#172d21"/>
 </LinearLayout>

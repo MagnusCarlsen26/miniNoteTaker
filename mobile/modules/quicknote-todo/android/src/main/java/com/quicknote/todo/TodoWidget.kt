@@ -17,7 +17,7 @@ import android.widget.RemoteViewsService
 import org.json.JSONObject
 import java.io.File
 
-private fun fingerprint(text: String): String {
+internal fun fingerprint(text: String): String {
     var hash = 2166136261L.toInt()
     text.forEach { hash = (hash xor it.code) * 16777619 }
     return Integer.toUnsignedString(hash, 16)
@@ -28,10 +28,11 @@ internal data class Projection(val entries: List<Entry>, val dark: Boolean, val 
 internal object TodoData {
     fun read(context: Context, includeEntries: Boolean = true): Projection {
         val systemDark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        // Expo SQLite's default private directory. Open read-only: widgets never create or write it.
+        // Expo SQLite's default private directory; never create an uninitialized notebook.
         val file = File(context.filesDir, "SQLite/quicknote-mobile.db")
         if (!file.exists()) return Projection(emptyList(), systemDark)
         return try {
+            TodoMutations.ensureSchema(context)
             SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                 val theme = db.rawQuery("SELECT data FROM mobile_settings WHERE id = 1", null).use {
                     if (it.moveToFirst()) JSONObject(it.getString(0)).optString("theme", "system") else "system"
@@ -49,11 +50,20 @@ internal object TodoData {
     }
 }
 class TodoWidget : AppWidgetProvider() {
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) { ids.forEach { update(context, manager, it) } }
-    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: Bundle) { update(context, manager, id) }
+    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        val pending = goAsync()
+        TodoMutations.executor.execute { try { ids.forEach { update(context, manager, it) } } finally { pending.finish() } }
+    }
+    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: Bundle) {
+        val pending = goAsync()
+        TodoMutations.executor.execute { try { update(context, manager, id) } finally { pending.finish() } }
+    }
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == Intent.ACTION_CONFIGURATION_CHANGED) refresh(context)
+        if (intent.action == Intent.ACTION_CONFIGURATION_CHANGED) {
+            val pending = goAsync()
+            TodoMutations.executor.execute { try { refresh(context) } finally { pending.finish() } }
+        }
     }
     companion object {
         fun refresh(context: Context) {
@@ -85,7 +95,10 @@ class TodoWidget : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.todo_header, heading)
             views.setOnClickPendingIntent(R.id.todo_empty, heading)
             // Only this explicit app activity receives mutable collection fill-in intents.
-            val template = Intent(launch).apply { this.data = null }
+            val template = Intent(context, TodoActionActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            val create = Intent(context, TodoCreateActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            views.setTextColor(R.id.todo_add, text)
+            views.setOnClickPendingIntent(R.id.todo_add, PendingIntent.getActivity(context, id + 200000, create, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             views.setPendingIntentTemplate(R.id.todo_list, PendingIntent.getActivity(context, id + 100000, template, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE))
             manager.updateAppWidget(id, views)
             manager.notifyAppWidgetViewDataChanged(id, R.id.todo_list)
@@ -109,11 +122,12 @@ class TodoService : RemoteViewsService() {
                 setTextColor(R.id.todo_title, Color.parseColor(if (projection.dark) "#eef8f0" else "#172d21"))
                 setTextColor(R.id.todo_details, Color.parseColor(if (projection.dark) "#adc5b5" else "#4e6657"))
                 setTextColor(R.id.todo_bullet, Color.parseColor(if (projection.dark) "#92dfaf" else "#216d43"))
-                setContentDescription(R.id.todo_row, entry.text)
+                setContentDescription(R.id.todo_bullet, "Mark ${entry.title} done")
                 val uri = Uri.Builder().scheme("quicknote").authority("todo").appendQueryParameter("note", entry.noteId)
                     .appendQueryParameter("ordinal", entry.ordinal.toString()).appendQueryParameter("fingerprint", fingerprint(entry.text))
                     .appendQueryParameter("start", entry.start.toString()).build()
-                setOnClickFillInIntent(R.id.todo_row, Intent().setData(uri))
+                setOnClickFillInIntent(R.id.todo_text, Intent().setData(uri).putExtra("operation", "open"))
+                setOnClickFillInIntent(R.id.todo_bullet, Intent().setData(uri).putExtra("operation", "complete"))
             }
         }
         override fun getLoadingView(): RemoteViews? = null

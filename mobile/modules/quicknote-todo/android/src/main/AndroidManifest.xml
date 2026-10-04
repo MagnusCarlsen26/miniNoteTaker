@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application>
+    <activity android:name="com.quicknote.todo.TodoActionActivity" android:taskAffinity="" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    <activity android:name="com.quicknote.todo.TodoCreateActivity" android:taskAffinity="" android:launchMode="singleTop" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Material.Light.Dialog.NoActionBar" android:windowSoftInputMode="adjustResize" />
     <receiver android:name="com.quicknote.todo.TodoWidget" android:exported="false" android:label="Quicknote Todo">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

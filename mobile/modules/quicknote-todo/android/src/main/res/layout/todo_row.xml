@@ -1,7 +1,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/todo_row"
  android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:orientation="horizontal" android:paddingTop="8dp" android:paddingBottom="8dp">
- <TextView android:id="@+id/todo_bullet" android:layout_width="20dp" android:layout_height="wrap_content" android:text="•" android:textSize="16sp" android:importantForAccessibility="no" />
- <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+ <TextView android:id="@+id/todo_bullet" android:layout_width="48dp" android:layout_height="48dp" android:gravity="center" android:text="○" android:textSize="16sp" android:clickable="true" />
+ <LinearLayout android:id="@+id/todo_text" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
   <TextView android:id="@+id/todo_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="2" android:ellipsize="end" android:textSize="16sp" android:textStyle="bold" />
   <TextView android:id="@+id/todo_details" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="2" android:ellipsize="end" android:textSize="14sp" />
  </LinearLayout>

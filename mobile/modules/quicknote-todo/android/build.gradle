@@ -7,5 +7,13 @@ group = 'com.quicknote.todo'
 version = '1.0.0'
 android {
   namespace 'com.quicknote.todo'
+  testOptions { unitTests.includeAndroidResources = true }
+  sourceSets { test.resources.srcDir '../../../src/fixtures' }
   defaultConfig { versionCode 1; versionName '1.0.0' }
+}
+
+dependencies {
+  testImplementation "org.robolectric:robolectric:4.14.1"
+  testImplementation "junit:junit:4.13.2"
+  testImplementation "org.json:json:20240303"
 }
