@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  AppState,
+  Linking,
   BackHandler,
   FlatList,
   Keyboard,
@@ -27,6 +29,9 @@ import {
   type Theme,
 } from "./src/model";
 import { loadNotebook } from "./src/storage";
+import { resolveTodoNavigation } from "./src/todoNavigation";
+import { todoEntries, type TodoEntry } from "./src/todo";
+import { pendingWidgetNavigation, refreshWidgets, widgetsAvailable } from "./src/widget";
 type Tab = "Editor" | "Library" | "Calendar";
 const light = {
   bg: "#f7faf7",
@@ -59,6 +64,10 @@ function Quicknote() {
   const [noteId, setNoteId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [draftDay, setDraftDay] = useState<string | undefined>();
+  const [draftTodo, setDraftTodo] = useState(false);
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>();
+  const pendingNavigation = useRef<string | null>(null);
+  const navigationHandler = useRef<(url: string) => void>(() => {});
   const [saveError, setSaveError] = useState("");
   const [section, setSection] = useState("Recent");
   const [modal, setModal] = useState<"menu" | "folders" | "create" | null>(
@@ -71,6 +80,11 @@ function Quicknote() {
   );
   const editor = useRef<TextInput>(null);
   const system = useColorScheme();
+  useEffect(() => { refreshWidgets(); }, [system, book]);
+  useEffect(() => {
+    // Native selection scrolls into view on focus; explicitly suppress the keyboard.
+    if (selection && tab === "Editor") editor.current?.focus();
+  }, [selection, noteId, tab]);
   const initialize = () => {
     try {
       const loaded = loadNotebook();
@@ -86,6 +100,28 @@ function Quicknote() {
     }
   };
   useEffect(initialize, []);
+  useEffect(() => {
+    const receive = (url: string | null) => {
+      if (!url?.startsWith("quicknote://todo")) return;
+      pendingNavigation.current = url;
+      navigationHandler.current(url);
+    };
+    void Linking.getInitialURL().then(receive);
+    receive(pendingWidgetNavigation());
+    const links = Linking.addEventListener("url", ({ url }) => receive(url));
+    const lifecycle = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        refreshWidgets();
+        receive(pendingWidgetNavigation());
+      }
+    });
+    refreshWidgets();
+    return () => { links.remove(); lifecycle.remove(); };
+  }, []);
+  useEffect(() => {
+    if (book && !saveError && pendingNavigation.current)
+      navigationHandler.current(pendingNavigation.current);
+  }, [book, saveError]);
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (modal) {
@@ -130,7 +166,7 @@ function Quicknote() {
   const save = (text: string) => {
     setDraft(text);
     try {
-      const id = book!.edit(noteId, text, draftDay);
+      const id = book!.edit(noteId, text, draftDay, draftTodo);
       setNoteId(id);
       if (id) setDraftDay(undefined);
       setSaveError("");
@@ -142,23 +178,36 @@ function Quicknote() {
     }
   };
   const canLeave = () => !saveError || save(draft);
-  const newNote = (day?: string) => {
+  const newNote = (day?: string, todo = false) => {
     if (!canLeave()) return;
     Keyboard.dismiss();
     setNoteId(null);
     setDraft("");
     setDraftDay(day);
+    setDraftTodo(todo);
+    setSelection(undefined);
     setTab("Editor");
     setModal(null);
     setTimeout(() => editor.current?.focus(), 100);
   };
-  const open = (n: Note) => {
+  const open = (n: Note, entry?: TodoEntry) => {
     if (!canLeave()) return;
     Keyboard.dismiss();
+    setDraftTodo(false);
+    setSelection(entry ? { start: entry.start, end: Math.min(entry.end, n.content.length) } : undefined);
+    setModal(null);
     setNoteId(n.id);
     setDraft(n.content);
     setDraftDay(undefined);
     setTab("Editor");
+  };
+  navigationHandler.current = (url: string) => {
+    if (!book || !canLeave()) return;
+    const entry = resolveTodoNavigation(url, book.state.notes);
+    pendingNavigation.current = null;
+    setModal(null);
+    if (entry) open(book.state.notes.find((n) => n.id === entry.noteId)!, entry);
+    else { Keyboard.dismiss(); setSection("Todo"); setTab("Library"); }
   };
   const change = (
     action: "pin" | "archive" | "trash" | "restore" | "delete",
@@ -183,7 +232,7 @@ function Quicknote() {
       accessibilityRole="button"
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
-      onPress={onPress}
+      onPressIn={onPress}
       style={({ pressed }) => [
         styles.button,
         {
@@ -210,7 +259,7 @@ function Quicknote() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Open ${title(item)}`}
-          onPress={() => open(item)}
+          onPressIn={() => open(item)}
           style={[styles.row, { borderColor: colors.border }]}
         >
           <Text
@@ -244,6 +293,7 @@ function Quicknote() {
       </SafeAreaView>
     );
   const recent = sorted(state.notes.filter(active));
+  const todos = todoEntries(state.notes);
   const libraryNotes =
     section === "Recent"
       ? recent
@@ -343,7 +393,7 @@ function Quicknote() {
                 ) : (
                   <>
                     {button(note.pinned ? "Unpin" : "Pin", () => change("pin"))}
-                    {button("Folders", () => setModal("folders"))}
+                    {button("Assign", () => setModal("folders"))}
                     {button("Archive", () => change("archive"))}
                     {button("Trash", () => change("trash"))}
                   </>
@@ -375,6 +425,12 @@ function Quicknote() {
                 New note for {draftDay}
               </Text>
             ) : null}
+            {(note?.isTodo || (!note && draftTodo)) && !readOnly ? (
+              <Text style={[styles.metadata, { color: colors.muted }]}>
+                Todo · Start each entry with --. Following lines add details.
+                {"\n"}Example: -- Buy groceries{"\n"}Milk, bread, and coffee
+              </Text>
+            ) : null}
             {readOnly ? (
               <ScrollView
                 style={styles.fill}
@@ -394,7 +450,10 @@ function Quicknote() {
                 multiline
                 textAlignVertical="top"
                 value={draft}
-                onChangeText={save}
+                selection={selection}
+                showSoftInputOnFocus={selection === undefined}
+                onPressIn={() => setSelection(undefined)}
+                onChangeText={(text) => { setSelection(undefined); save(text); }}
                 placeholder="Start writing…"
                 placeholderTextColor={colors.muted}
                 style={[
@@ -418,7 +477,7 @@ function Quicknote() {
         ) : tab === "Library" ? (
           <View style={styles.fill}>
             <View style={styles.tools}>
-              {button("New note", () => newNote())}
+              {button(section === "Todo" ? "New Todo note" : "New note", () => newNote(undefined, section === "Todo"))}
               {button("New folder", () => {
                 setFolderName("");
                 setModal("create");
@@ -431,7 +490,7 @@ function Quicknote() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.tools}
               >
-                {["Recent", "Archive", "Trash"].map((s) => (
+                {["Recent", "Todo", "Archive", "Trash"].map((s) => (
                   <React.Fragment key={s}>
                     {button(s, () => setSection(s), section === s)}
                   </React.Fragment>
@@ -448,10 +507,29 @@ function Quicknote() {
               </ScrollView>
             </View>
             <Text style={[styles.metadata, { color: colors.muted }]}>
-              {folder?.name ?? section} · {libraryNotes.length} notes
+              {folder?.name ?? section} · {section === "Todo" ? `${todos.length} entries` : `${libraryNotes.length} notes`}
               {section === "Trash" ? " · Kept until you delete them" : ""}
             </Text>
-            {rows(libraryNotes)}
+            {section === "Todo" ? (
+              <>
+                <Text style={[styles.metadata, { color: colors.muted }]}>
+                  Android widget: long-press your home screen → Widgets → Quicknote Todo.
+                  {widgetsAvailable ? " Drag it onto the home screen and resize to fit." : " Install the native Android app to use the widget; Expo Go supports the Todo list."}
+                </Text>
+                <FlatList data={todos} keyExtractor={(entry) => entry.id}
+                  contentContainerStyle={styles.list}
+                  ListEmptyComponent={<Text style={[styles.empty, { color: colors.muted }]}>No todos yet{"\n"}Add a Todo note in Quicknote.</Text>}
+                  renderItem={({ item }) => {
+                    const source = state.notes.find((n) => n.id === item.noteId)!;
+                    return <Pressable accessibilityRole="button" accessibilityLabel={`${item.text}, from ${title(source)}`}
+                      onPressIn={() => open(source, item)} style={[styles.row, { borderColor: colors.border }]}>
+                      <Text numberOfLines={2} style={[styles.noteTitle, { color: colors.text }]}>{item.title}</Text>
+                      {item.details ? <Text numberOfLines={2} style={{ color: colors.muted }}>{item.details}</Text> : null}
+                      <Text numberOfLines={1} style={[styles.caption, { color: colors.muted }]}>{title(source)}</Text>
+                    </Pressable>;
+                  }} />
+              </>
+            ) : rows(libraryNotes)}
           </View>
         ) : (
           <View style={styles.fill}>
@@ -493,7 +571,7 @@ function Quicknote() {
                     accessibilityRole="button"
                     accessibilityLabel={`${key}, ${count} notes`}
                     accessibilityState={{ selected: selectedDay === key }}
-                    onPress={() => setSelectedDay(key)}
+                    onPressIn={() => setSelectedDay(key)}
                     style={[
                       styles.day,
                       {
@@ -534,7 +612,7 @@ function Quicknote() {
               key={t}
               accessibilityRole="tab"
               accessibilityState={{ selected: tab === t }}
-              onPress={() => {
+              onPressIn={() => {
                 if (canLeave()) {
                   Keyboard.dismiss();
                   setTab(t);
@@ -577,7 +655,7 @@ function Quicknote() {
                     ? "Appearance"
                     : modal === "create"
                       ? "New folder"
-                      : "Assign folders"}
+                      : "Assign note"}
                 </Text>
                 {button("Done", () => setModal(null))}
               </View>
@@ -613,6 +691,9 @@ function Quicknote() {
                 </>
               ) : (
                 <ScrollView>
+                  {button(`${note?.isTodo ? "✓ " : "○ "}Todo`, () => {
+                    if (canLeave()) run(() => book.change(noteId!, "todo"));
+                  }, Boolean(note?.isTodo))}
                   {state.folders.length === 0 ? (
                     <Text style={[styles.metadata, { color: colors.muted }]}>
                       Create a folder in Library first.
