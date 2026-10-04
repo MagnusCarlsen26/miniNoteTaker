@@ -1,0 +1,11 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/todo_card"
+ android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
+ android:padding="16dp" android:background="@drawable/todo_light">
+ <TextView android:id="@+id/todo_header" android:layout_width="match_parent" android:layout_height="wrap_content"
+  android:minHeight="48dp" android:gravity="center_vertical" android:text="Todo · 0" android:textSize="20sp" android:textStyle="bold" android:textColor="#172d21"/>
+ <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+  <ListView android:id="@+id/todo_list" android:layout_width="match_parent" android:layout_height="match_parent" android:divider="#405d4b" android:dividerHeight="1dp" />
+  <TextView android:id="@+id/todo_empty" android:layout_width="match_parent" android:layout_height="match_parent" android:minHeight="48dp"
+   android:gravity="center_vertical" android:text="No todos yet\nAdd a Todo note in Quicknote." android:textColor="#4e6657" android:textSize="16sp"/>
+ </FrameLayout>
+</LinearLayout>

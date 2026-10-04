@@ -9,7 +9,12 @@
       "package": "com.quicknote.mobile",
       "softwareKeyboardLayoutMode": "resize"
     },
-    "plugins": ["expo-sqlite"],
-    "ios": { "bundleIdentifier": "com.quicknote.mobile" }
+    "plugins": [
+      "expo-sqlite"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.quicknote.mobile"
+    },
+    "scheme": "quicknote"
   }
 }
