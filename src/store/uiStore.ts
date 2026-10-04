@@ -18,6 +18,8 @@ type UiState = {
   selectedSidebarItem: SidebarItem;
   selectedHistoryNoteId: string | null;
   selectedDate: string;
+  readingOpen: boolean;
+  setReadingOpen: (readingOpen: boolean) => void;
   setOverlayVisible: (isOverlayVisible: boolean) => void;
   setLastCommandResult: (lastCommandResult: string | null) => void;
   setTheme: (theme: ThemePreference) => void;
@@ -44,6 +46,8 @@ export const useUiStore = create<UiState>((set) => ({
   selectedSidebarItem: "recent",
   selectedHistoryNoteId: null,
   selectedDate: todayDateKey(),
+  readingOpen: false,
+  setReadingOpen: (readingOpen) => set({ readingOpen }),
   setOverlayVisible: (isOverlayVisible) => set({ isOverlayVisible }),
   setLastCommandResult: (lastCommandResult) => set({ lastCommandResult }),
   setTheme: (theme) => set({ theme }),

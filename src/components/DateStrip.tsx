@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import { Calendar } from "lucide-react";
-import { KeyboardEvent, MouseEvent, useLayoutEffect, useMemo, useRef } from "react";
+import { KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ActionButton } from "./ActionButton";
 import { buildDateRange, todayDateKey } from "../lib/dates";
 import { centerSelectedDateInStrip } from "../lib/dateStripScroll";
 
@@ -14,15 +15,6 @@ type DateStripProps = {
   visible?: boolean;
 };
 
-function handleMouseDownAction(event: MouseEvent<HTMLElement>, action: () => void) {
-  if (event.button !== 0) {
-    return;
-  }
-
-  event.preventDefault();
-  action();
-}
-
 export function DateStrip({
   orientation,
   selectedDate,
@@ -33,6 +25,7 @@ export function DateStrip({
   visible = true
 }: DateStripProps) {
   const today = todayDateKey();
+  const [visibleMonth, setVisibleMonth] = useState(dayjs(selectedDate).format("MMM YY"));
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const selectedDateRef = useRef<HTMLButtonElement | null>(null);
   const dates = useMemo(() => buildDateRange(today, 120, 120), [today]);
@@ -104,6 +97,7 @@ export function DateStrip({
           : "relative flex min-w-0 flex-1 items-center gap-1"
       }
     >
+      {isVertical && <div className="text-center text-[9px] py-1" aria-label="Visible month">{visibleMonth}</div>}
       {isVertical ? (
         <>
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-gradient-to-b from-[#f7faf6] to-transparent dark:from-[#11170f]" />
@@ -116,14 +110,22 @@ export function DateStrip({
       ) : null}
       <div
         ref={scrollRef}
+        onScroll={() => {
+          const container = scrollRef.current;
+          if (!container) return;
+          const rect = container.getBoundingClientRect();
+          const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-date]"));
+          const button = buttons.find(item => item.getBoundingClientRect().bottom > rect.top + 8);
+          if (button?.dataset.date) setVisibleMonth(dayjs(button.dataset.date).format("MMM YY"));
+        }}
         role="listbox"
         aria-label="Date strip"
         tabIndex={0}
         onKeyDown={handleKeyDown}
         className={
           isVertical
-            ? "min-h-0 flex-1 overflow-y-auto scroll-smooth [scroll-snap-type:y_mandatory] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            : "min-w-0 flex-1 overflow-x-auto scroll-smooth [scroll-snap-type:x_mandatory] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            ? "min-h-0 flex-1 overflow-y-auto  [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            : "min-w-0 flex-1 overflow-x-auto  [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         }
       >
         <div
@@ -140,19 +142,19 @@ export function DateStrip({
             const hasNotes = (noteCounts[dateKey] ?? 0) > 0;
 
             return (
-              <button
+              <ActionButton
                 key={dateKey}
+                data-date={dateKey}
                 ref={isSelected ? selectedDateRef : undefined}
                 type="button"
                 role="option"
                 aria-pressed={isSelected}
                 aria-label={date.format("dddd, MMMM D")}
-                onMouseDown={(event) => handleMouseDownAction(event, () => onSelectDate(dateKey))}
-                onClick={(event) => event.preventDefault()}
+                onAction={() => onSelectDate(dateKey)}
                 className={
                   isVertical
-                    ? "group flex w-8 shrink-0 snap-center flex-col items-center justify-center rounded-md py-1 text-[10px] font-medium text-[#536150] transition hover:bg-[#eef4ec] aria-pressed:bg-[#2f6b43] aria-pressed:text-white dark:text-[#b8c7b4] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#2f6b43] dark:aria-pressed:text-[#ecf3ea]"
-                    : "group flex h-10 w-10 shrink-0 snap-center flex-col items-center justify-center rounded-md text-[10px] font-medium text-[#536150] transition hover:bg-[#eef4ec] aria-pressed:bg-[#2f6b43] aria-pressed:text-white dark:text-[#b8c7b4] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#2f6b43] dark:aria-pressed:text-[#ecf3ea]"
+                    ? "group flex w-8 shrink-0  flex-col items-center justify-center rounded-md py-1 text-[10px] font-medium text-[#536150] transition hover:bg-[#eef4ec] aria-pressed:bg-[#2f6b43] aria-pressed:text-white dark:text-[#b8c7b4] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#2f6b43] dark:aria-pressed:text-[#ecf3ea]"
+                    : "group flex h-10 w-10 shrink-0  flex-col items-center justify-center rounded-md text-[10px] font-medium text-[#536150] transition hover:bg-[#eef4ec] aria-pressed:bg-[#2f6b43] aria-pressed:text-white dark:text-[#b8c7b4] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#2f6b43] dark:aria-pressed:text-[#ecf3ea]"
                 }
                 style={isToday && !isSelected ? { boxShadow: "inset 0 0 0 1px #2f6b43" } : undefined}
               >
@@ -166,21 +168,18 @@ export function DateStrip({
                 ) : (
                   <span className="mt-0.5 h-1 w-1" aria-hidden="true" />
                 )}
-              </button>
+              </ActionButton>
             );
           })}
         </div>
       </div>
+      {isVertical && <ActionButton className="!px-0 !text-[9px]" onAction={() => onSelectDate(today)}>Today</ActionButton>}
       {showCalendar ? (
-        <button
+        <ActionButton
           type="button"
           data-calendar-trigger
           aria-label="Open calendar"
-          onMouseDown={(event) => {
-            event.stopPropagation();
-            handleMouseDownAction(event, onOpenCalendar!);
-          }}
-          onClick={(event) => event.preventDefault()}
+          onAction={() => onOpenCalendar?.()}
           className={
             isVertical
               ? "inline-flex h-8 w-full shrink-0 items-center justify-center border-t border-[#dce5d8] text-[#2f6b43] hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
@@ -188,7 +187,7 @@ export function DateStrip({
           }
         >
           <Calendar size={14} aria-hidden="true" />
-        </button>
+        </ActionButton>
       ) : null}
     </div>
   );

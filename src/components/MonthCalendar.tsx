@@ -1,5 +1,6 @@
 import dayjs, { type Dayjs } from "dayjs";
-import { MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActionButton } from "./ActionButton";
 import { buildMonthWeeks, todayDateKey } from "../lib/dates";
 
 type MonthCalendarProps = {
@@ -9,15 +10,6 @@ type MonthCalendarProps = {
 };
 
 const MONTH_WINDOW = 24;
-
-function handleMouseDownAction(event: MouseEvent<HTMLElement>, action: () => void) {
-  if (event.button !== 0) {
-    return;
-  }
-
-  event.preventDefault();
-  action();
-}
 
 function monthKey(month: Dayjs) {
   return month.format("YYYY-MM");
@@ -97,14 +89,14 @@ export function MonthCalendar({ selectedDate, noteCounts, onSelectDate }: MonthC
     onSelectDate(dateKey);
     const month = dayjs(dateKey).startOf("month");
     setVisibleMonth(month);
-    scrollToMonth(month, "smooth");
+    scrollToMonth(month);
   };
 
   return (
     <div className="flex w-[224px] shrink-0 flex-col" aria-label="Calendar">
       <div
         ref={scrollRef}
-        className="max-h-[232px] overflow-y-auto scroll-smooth [-ms-overflow-style:none] [scroll-snap-type:y_mandatory] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="max-h-[232px] overflow-y-auto [-ms-overflow-style:none]  [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {months.map((month) => (
           <div
@@ -116,7 +108,7 @@ export function MonthCalendar({ selectedDate, noteCounts, onSelectDate }: MonthC
                 monthTileRefs.current.delete(monthKey(month));
               }
             }}
-            className="snap-start pb-2"
+            className=" pb-2"
           >
             <div className="mb-1 text-center text-xs font-medium uppercase tracking-[0.12em] text-[#536150] dark:text-[#b8c7b4]">
               {month.format("MMMM YYYY")}
@@ -175,13 +167,12 @@ function MonthDayCell({
   const isSelected = dateKey === selectedDate;
 
   return (
-    <button
+    <ActionButton
       type="button"
       role="gridcell"
       aria-label={date.format("dddd, MMMM D")}
       aria-pressed={isSelected}
-      onMouseDown={(event) => handleMouseDownAction(event, () => onSelectDate(dateKey))}
-      onClick={(event) => event.preventDefault()}
+      onAction={() => onSelectDate(dateKey)}
       className={`group relative flex h-7 w-7 items-center justify-center rounded-md text-xs transition ${
         inMonth
           ? "text-[#253022] hover:bg-[#eef4ec] dark:text-[#e2eadf] dark:hover:bg-[#202a1d]"
@@ -198,6 +189,6 @@ function MonthDayCell({
         }`}
         aria-hidden="true"
       />
-    </button>
+    </ActionButton>
   );
 }
