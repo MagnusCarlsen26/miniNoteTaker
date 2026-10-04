@@ -7,15 +7,16 @@ type UseAppShortcutsOptions = {
   focusEditor: () => void;
   closeOverlay: () => Promise<void>;
   beforeCloseOverlay?: () => boolean;
+  createNote: () => void;
 };
 
 export function useAppShortcuts({
   getCursorPosition,
   focusEditor,
   closeOverlay,
-  beforeCloseOverlay
+  beforeCloseOverlay,
+  createNote
 }: UseAppShortcutsOptions) {
-  const resetDraft = useNoteStore((state) => state.resetDraft);
   const togglePinned = useNoteStore((state) => state.togglePinned);
   const setLastCursorPosition = useUiStore((state) => state.setLastCursorPosition);
 
@@ -37,12 +38,10 @@ export function useAppShortcuts({
     "ctrl+n, meta+n",
     (event) => {
       event.preventDefault();
-      resetDraft();
-      setLastCursorPosition(0);
-      window.requestAnimationFrame(focusEditor);
+      createNote();
     },
     { enableOnFormTags: true, enableOnContentEditable: true },
-    [focusEditor, resetDraft, setLastCursorPosition]
+    [createNote]
   );
 
   useHotkeys(

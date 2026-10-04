@@ -453,3 +453,28 @@ describe("noteStore", () => {
     expect(useNoteStore.getState().draftContent).toBe("");
   });
 });
+
+describe("save coordination", () => {
+  beforeEach(() => { vi.clearAllMocks(); resetStore(); useNoteStore.setState({ revision: 0, draftCreatedDate: null }); });
+  it("serializes concurrent creates and keeps edits during saving dirty", async () => {
+    let complete!: (saved: Note) => void;
+    createNoteMock.mockReturnValue(new Promise(resolve => { complete = resolve; }));
+    useNoteStore.getState().setDraftContent("first");
+    const first = useNoteStore.getState().saveDraft(); const second = useNoteStore.getState().saveDraft();
+    useNoteStore.getState().setDraftContent("newer"); complete(note({ content: "first" })); await Promise.all([first, second]);
+    expect(createNoteMock).toHaveBeenCalledTimes(1); expect(useNoteStore.getState().draftContent).toBe("newer"); expect(useNoteStore.getState().saveStatus).toBe("dirty");
+    updateNoteMock.mockResolvedValue(note({ content: "newer" })); await useNoteStore.getState().saveDraft();
+    expect(updateNoteMock).toHaveBeenCalledWith("note-1", "newer"); expect(useNoteStore.getState().saveStatus).toBe("saved");
+  });
+  it("retry saves newer draft content rather than a failed snapshot", async () => {
+    createNoteMock.mockRejectedValueOnce(new Error("offline")); useNoteStore.getState().setDraftContent("old"); await useNoteStore.getState().saveDraft();
+    useNoteStore.getState().setDraftContent("newer"); createNoteMock.mockResolvedValue(note({ content: "newer" })); await useNoteStore.getState().retryPendingSave();
+    expect(createNoteMock).toHaveBeenLastCalledWith("newer", undefined); expect(useNoteStore.getState().draftContent).toBe("newer"); expect(useNoteStore.getState().saveStatus).toBe("saved");
+  });
+  it("retains a created identity when metadata fails, preventing duplicate retry creates", async () => {
+    createNoteMock.mockResolvedValue(note()); setNoteFoldersMock.mockRejectedValueOnce(new Error("offline"));
+    useNoteStore.setState({ draftContent: "content", pendingSave: { noteId: null, content: "content", folderIds: ["folder"] }, saveStatus: "error" });
+    await useNoteStore.getState().retryPendingSave(); expect(useNoteStore.getState().pendingSave?.noteId).toBe("note-1");
+    updateNoteMock.mockResolvedValue(note()); setNoteFoldersMock.mockResolvedValue(note()); await useNoteStore.getState().retryPendingSave(); expect(createNoteMock).toHaveBeenCalledTimes(1);
+  });
+});

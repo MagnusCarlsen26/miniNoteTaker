@@ -35,6 +35,7 @@ type PendingSave = {
 };
 
 type NoteState = {
+  revision: number;
   activeNote: Note | null;
   draftContent: string;
   notes: Note[];
@@ -99,16 +100,19 @@ function pendingFromState(state: NoteState): PendingSave {
   };
 }
 
+let saving: Promise<Note | null> | null = null;
+
 async function persistPendingSave(pendingSave: PendingSave): Promise<Note> {
   let note = pendingSave.noteId
     ? await updateNote(pendingSave.noteId, pendingSave.content)
     : await createNote(pendingSave.content, pendingSave.createdAt);
 
+  pendingSave.noteId = note.id;
   if (typeof pendingSave.pinned === "boolean" && note.pinned !== pendingSave.pinned) {
     note = await setPinned(note.id, pendingSave.pinned);
   }
 
-  if (pendingSave.folderIds) {
+  if (pendingSave.folderIds && pendingSave.folderIds.join() !== note.folders.map(folder => folder.id).join()) {
     note = await setNoteFolders(note.id, pendingSave.folderIds);
   }
 
@@ -116,6 +120,7 @@ async function persistPendingSave(pendingSave: PendingSave): Promise<Note> {
 }
 
 export const useNoteStore = create<NoteState>((set, get) => ({
+  revision: 0,
   activeNote: null,
   draftContent: "",
   notes: [],
@@ -133,6 +138,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
 
   setDraftContent: (content) =>
     set((state) => ({
+      revision: state.revision + Number(content !== state.draftContent),
       draftContent: content,
       saveStatus: content !== state.draftContent ? "dirty" : state.saveStatus,
       saveError: content !== state.draftContent ? null : state.saveError
@@ -323,97 +329,33 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     }
   },
 
-  saveDraft: async () => {
+  saveDraft: () => {
+    if (saving) return saving;
     const state = get();
-
-    if (state.draftContent.trim().length === 0 && !state.activeNote) {
-      set({ saveStatus: "idle", saveError: null, pendingSave: null });
-      return null;
+    if (!state.activeNote && !state.draftContent.trim()) {
+      set({ saveStatus: "idle", pendingSave: null, saveError: null });
+      return Promise.resolve(null);
     }
-
-    if (state.draftContent.trim().length === 0 && state.activeNote) {
+    const pending = { ...pendingFromState(state), ...state.pendingSave, content: state.draftContent };
+    const revision = state.revision;
+    set({ saveStatus: "saving", saveError: null });
+    saving = (async () => {
       try {
-        set({ saveStatus: "saving", saveError: null });
-        await updateNote(state.activeNote.id, state.draftContent);
-        await deleteEmptyNote(state.activeNote.id);
-        const notes = await listNotes();
-        set({
-          activeNote: null,
-          draftContent: "",
-          notes,
-          saveStatus: "idle",
-          saveError: null,
-          pendingSave: null
-        });
+        const note = await persistPendingSave(pending);
+        // Keep the assigned identity even if a later metadata operation fails.
+        set(current => ({ activeNote: note, notes: upsertNote(current.notes, note),
+          draftCreatedDate: null, pendingSave: null, saveError: null,
+          saveStatus: current.revision === revision ? "saved" : "dirty" }));
+        return note;
       } catch {
-        set({
-          pendingSave: pendingFromState(state),
-          saveStatus: "error",
-          saveError: "Saved locally when storage is available"
-        });
-      }
-      return null;
-    }
-
-    try {
-      set({ saveStatus: "saving", saveError: null });
-      const createdAt = state.draftCreatedDate ? dateKeyToCreatedAt(state.draftCreatedDate) : undefined;
-      const note = state.activeNote
-        ? await updateNote(state.activeNote.id, state.draftContent)
-        : await createNote(state.draftContent, createdAt);
-
-      set((current) => ({
-        activeNote: note,
-        draftContent: current.draftContent,
-        notes: upsertNote(current.notes, note),
-        draftCreatedDate: null,
-        saveStatus: "saved",
-        saveError: null,
-        pendingSave: null
-      }));
-
-      return note;
-    } catch {
-      set({
-        pendingSave: pendingFromState(state),
-        saveStatus: "error",
-        saveError: "Saved locally when storage is available"
-      });
-      return null;
-    }
+        set({ pendingSave: pending, saveStatus: "error", saveError: "Not saved — Retry" });
+        return null;
+      } finally { saving = null; }
+    })();
+    return saving;
   },
 
-  retryPendingSave: async () => {
-    const pendingSave = get().pendingSave;
-    if (!pendingSave) {
-      return null;
-    }
-
-    try {
-      set({ saveStatus: "saving", saveError: null });
-      const note = await persistPendingSave(pendingSave);
-      const folders = await listFolders();
-      set((state) => ({
-        activeNote: note,
-        draftContent: state.draftContent,
-        notes: upsertNote(state.notes, note),
-        folders,
-        draftCreatedDate: null,
-        saveStatus: "saved",
-        saveError: null,
-        pendingSave: null
-      }));
-
-      return note;
-    } catch {
-      set({
-        pendingSave,
-        saveStatus: "error",
-        saveError: "Saved locally when storage is available"
-      });
-      return null;
-    }
-  },
+  retryPendingSave: () => get().saveDraft(),
 
   togglePinned: async () => {
     let activeNote = get().activeNote;
