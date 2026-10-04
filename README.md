@@ -54,3 +54,7 @@ Reload Hyprland after editing:
 ```bash
 hyprctl reload
 ```
+
+## Android mobile app
+
+The independent Expo SDK 57 app lives in [`mobile/`](mobile/README.md). See its README for Android launch, APK build instructions, behavior, and verification commands. Mobile notes remain separate from the desktop database.
