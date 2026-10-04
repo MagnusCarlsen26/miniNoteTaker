@@ -36,8 +36,8 @@ describe("editor navigation", () => {
     expect(screen.getByRole("button", { name: "Close folders" })).toBeTruthy();
     fireEvent.pointerDown(screen.getByTestId("editor")); expect(screen.queryByRole("dialog", { name: "Folders" })).toBeNull();
   });
-  it("has only one calendar create control", () => {
-    useUiStore.setState({ viewMode: "home", selectedSidebarItem: "calendar" }); render(<OverlayEditor />);
+  it.each(["recent", "folders", "archive", "trash", "calendar"] as const)("has one note create control in %s", section => {
+    useUiStore.setState({ viewMode: "home", selectedSidebarItem: section }); render(<OverlayEditor />);
     expect(screen.getAllByRole("button", { name: /New/ })).toHaveLength(1);
   });
 });
