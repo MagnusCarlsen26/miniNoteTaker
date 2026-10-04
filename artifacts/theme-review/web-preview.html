@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Quicknote theme preview</title></head>
+<body><div id="root"></div>
+<script type="module">
+const today = new Date().toISOString();
+const folders = [{ id: 'ideas', name: 'Ideas', created_at: today }];
+let notes = [{ id: 'sample', content: 'Small ideas\nKeep a notebook close.\nOne useful thought at a time.', created_at: today, updated_at: today, folders: [...folders], pinned: false, archived_at: null, deleted_at: null }];
+let next = 0;
+const callbacks = new Map();
+window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
+window.__TAURI_INTERNALS__ = {
+  metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
+  transformCallback(fn) { callbacks.set(++next, fn); return next; },
+  unregisterCallback(id) { callbacks.delete(id); },
+  async invoke(command, args = {}) {
+    const find = () => notes.find(note => note.id === (args.id ?? args.noteId));
+    switch (command) {
+      case 'get_setting': return localStorage.getItem('quicknote.preview.' + args.key);
+      case 'set_setting': localStorage.setItem('quicknote.preview.' + args.key, args.value); return;
+      case 'list_notes': return notes.filter(note => !note.deleted_at && !note.archived_at);
+      case 'list_archived_notes': return notes.filter(note => !note.deleted_at && note.archived_at);
+      case 'list_trashed_notes': return notes.filter(note => note.deleted_at);
+      case 'list_folders': return folders;
+      case 'get_note': case 'get_trashed_note': return find() ?? null;
+      case 'create_note': {
+        const note = { id: crypto.randomUUID(), content: args.content, created_at: args.created_at ?? new Date().toISOString(), updated_at: new Date().toISOString(), folders: [], pinned: false, archived_at: null, deleted_at: null };
+        notes.unshift(note); return note;
+      }
+      case 'update_note': Object.assign(find(), { content: args.content, updated_at: new Date().toISOString() }); return find();
+      case 'set_pinned': find().pinned = args.pinned; return find();
+      case 'set_note_folders': find().folders = folders.filter(folder => args.folderIds.includes(folder.id)); return find();
+      case 'create_folder': { const folder = { id: crypto.randomUUID(), name: args.name, created_at: new Date().toISOString() }; folders.push(folder); return folder; }
+      case 'delete_folder': {
+        const index = folders.findIndex(folder => folder.id === args.id); if (index >= 0) folders.splice(index, 1);
+        notes.forEach(note => { if (!note.archived_at && note.folders.some(folder => folder.id === args.id)) note.deleted_at = new Date().toISOString(); }); return;
+      }
+      case 'soft_delete_note': find().deleted_at = new Date().toISOString(); return;
+      case 'restore_note': find().deleted_at = null; return find();
+      case 'archive_note': find().archived_at = new Date().toISOString(); return find();
+      case 'unarchive_note': find().archived_at = null; return find();
+      case 'permanently_delete_note': case 'delete_empty_note': notes = notes.filter(note => note.id !== args.id); return;
+      case 'plugin:event|listen': return ++next;
+      default: return null;
+    }
+  }
+};
+const { useNoteStore } = await import('/src/store/noteStore.ts');
+useNoteStore.getState().setActiveNote(notes[0]);
+const { useUiStore } = await import('/src/store/uiStore.ts');
+useUiStore.setState({ isOverlayVisible: false });
+await import('/src/main.tsx');
+</script>
+</body>
+</html>

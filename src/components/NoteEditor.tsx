@@ -30,20 +30,18 @@ const editorTheme = EditorView.theme({
   },
   ".cm-content": {
     padding: 0,
-    caretColor: "currentColor"
+    caretColor: "var(--accent)"
   },
   ".cm-line": {
     padding: 0
   },
   ".cm-cursor": {
-    borderLeftColor: "currentColor"
+    borderLeftColor: "var(--accent)"
   },
-  ".cm-placeholder": {
-    color: "#8a9587"
-  },
-  "&.dark .cm-placeholder": {
-    color: "#788475"
-  }
+  ".cm-placeholder": { color: "var(--text-secondary)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--selection)" },
+  ".cm-content ::selection": { backgroundColor: "var(--selection)", color: "var(--text)" }
+
 });
 
 export function NoteEditor({
@@ -181,15 +179,13 @@ export function NoteEditor({
     }
   };
 
-  const underlineClass = showTitleUnderline
-    ? "bg-[linear-gradient(to_right,#c9d5c5,#c9d5c5)] bg-[length:100%_1px] bg-[position:0_1.5rem] bg-no-repeat dark:bg-[linear-gradient(to_right,#3d4939,#3d4939)]"
-    : "";
+  const underlineClass = showTitleUnderline ? "note-title-underline" : "";
 
   return (
     <div
       ref={containerRef}
       onMouseDown={handleMouseDown}
-      className={`h-full min-h-0 w-full overflow-x-hidden text-[#172116] dark:text-[#ecf3ea] ${underlineClass}`}
+      className={`h-full min-h-0 w-full overflow-x-hidden text-[var(--text)] ${underlineClass}`}
     />
   );
 }

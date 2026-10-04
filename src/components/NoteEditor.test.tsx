@@ -1,0 +1,27 @@
+import { undo, undoDepth } from "@codemirror/commands";
+import type { EditorView } from "@codemirror/view";
+import { act, cleanup, render } from "@testing-library/react";
+import { createRef } from "react";
+import { afterEach, expect, it, vi } from "vitest";
+import { NoteEditor } from "./NoteEditor";
+afterEach(() => { cleanup(); document.documentElement.classList.remove("dark"); });
+it("preserves editor identity, document, cursor and undo history through theme switches", () => {
+  const ref = createRef<EditorView>();
+  const change = vi.fn();
+  const { rerender } = render(<NoteEditor value="Title" onChange={change} editorViewRef={ref} />);
+  const view = ref.current!;
+  act(() => view.dispatch({ changes: { from: 5, insert: " draft" }, selection: { anchor: 8 } }));
+  const depth = undoDepth(view.state);
+  document.documentElement.classList.add("dark");
+  rerender(<NoteEditor value="Title draft" onChange={change} editorViewRef={ref} />);
+  expect(ref.current).toBe(view);
+  expect(view.state.doc.toString()).toBe("Title draft");
+  expect(view.state.selection.main.head).toBe(8);
+  expect(undoDepth(view.state)).toBe(depth);
+  document.documentElement.classList.remove("dark");
+  rerender(<NoteEditor value="Title draft" onChange={change} editorViewRef={ref} />);
+  expect(ref.current).toBe(view);
+  expect(view.state.selection.main.head).toBe(8);
+  act(() => { expect(undo(view)).toBe(true); });
+  expect(view.state.doc.toString()).toBe("Title");
+});

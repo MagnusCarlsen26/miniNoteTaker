@@ -41,3 +41,21 @@ describe("editor navigation", () => {
     expect(screen.getAllByRole("button", { name: /New/ })).toHaveLength(1);
   });
 });
+
+it("places Back first in the browser header and uses accessible icon actions", async () => {
+  const note = { id: "sample", content: "Sample title\nBody", created_at: "2026-05-20T12:00:00Z", updated_at: "2026-05-20T12:00:00Z", folders: [], pinned: false, archived_at: null, deleted_at: null };
+  useNoteStore.setState({ notes: [note] });
+  useUiStore.setState({ viewMode: "home", readingOpen: true, selectedHistoryNoteId: note.id });
+  const { container } = render(<OverlayEditor />);
+  const back = screen.getByRole("button", { name: "Back" });
+  expect(container.querySelector(".browse-header")?.firstElementChild).toBe(back);
+  for (const name of ["Back", "Edit", "Archive", "Trash"]) {
+    const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
+    expect(button.textContent).toBe("");
+    expect(button.querySelector("svg")).toBeTruthy();
+    expect(container.querySelector(".browse-header")?.contains(button)).toBe(true);
+  }
+  expect(container.querySelector(".reading .toolbar")).toBeNull();
+  fireEvent.mouseDown(back, { button: 0 });
+  expect(useUiStore.getState().readingOpen).toBe(false);
+});

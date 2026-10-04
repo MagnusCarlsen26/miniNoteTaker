@@ -71,7 +71,7 @@ export function CalendarPicker({
       aria-label="Calendar"
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      className={`absolute z-30 w-56 rounded-md border border-[#dce5d8] bg-[#fbfdfb] p-2 shadow-lg transition-opacity dark:border-[#2c3628] dark:bg-[#141b12] ${
+      className={`absolute z-30 w-56 rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg transition-opacity ${
         anchor === "right"
           ? "bottom-0 right-full mr-2"
           : anchor === "below"
@@ -89,11 +89,11 @@ export function CalendarPicker({
             handleMouseDownAction(event, () => setVisibleMonth((month) => month.subtract(1, "month")))
           }
           onClick={(event) => event.preventDefault()}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#536150] hover:bg-[#eef4ec] dark:text-[#b8c7b4] dark:hover:bg-[#202a1d]"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--hover)]"
         >
           <ChevronLeft size={14} aria-hidden="true" />
         </button>
-        <div className="text-xs font-medium uppercase tracking-[0.12em] text-[#536150] dark:text-[#b8c7b4]">
+        <div className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--text-secondary)]">
           {visibleMonth.format("MMM YYYY")}
         </div>
         <button
@@ -103,12 +103,12 @@ export function CalendarPicker({
             handleMouseDownAction(event, () => setVisibleMonth((month) => month.add(1, "month")))
           }
           onClick={(event) => event.preventDefault()}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#536150] hover:bg-[#eef4ec] dark:text-[#b8c7b4] dark:hover:bg-[#202a1d]"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--hover)]"
         >
           <ChevronRight size={14} aria-hidden="true" />
         </button>
       </div>
-      <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[10px] uppercase text-[#657064] dark:text-[#aeb9aa]">
+      <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[10px] uppercase text-[var(--text-secondary)]">
         {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((label) => (
           <div key={label}>{label}</div>
         ))}
@@ -137,18 +137,18 @@ export function CalendarPicker({
                     })
                   }
                   onClick={(event) => event.preventDefault()}
-                  className={`group relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs transition ${
+                  className={`calendar-date group relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs transition ${
                     inMonth
-                      ? "text-[#253022] hover:bg-[#eef4ec] dark:text-[#e2eadf] dark:hover:bg-[#202a1d]"
-                      : "text-[#9aa89a] dark:text-[#5f6a5d]"
-                  } aria-pressed:bg-[#2f6b43] aria-pressed:text-white dark:aria-pressed:bg-[#2f6b43] dark:aria-pressed:text-[#ecf3ea]`}
-                  style={isToday && !isSelected ? { boxShadow: "inset 0 0 0 1px #2f6b43" } : undefined}
+                      ? "text-[var(--text)] hover:bg-[var(--hover)]"
+                      : "text-[var(--text-secondary)]"
+                  } aria-pressed:bg-[var(--active)] aria-pressed:text-[var(--on-active)]`}
+                  style={isToday && !isSelected ? { boxShadow: "inset 0 0 0 1px var(--accent)" } : undefined}
                 >
                   {date.format("D")}
                   <span
                     className={`absolute bottom-0.5 h-1 w-1 rounded-full ${
                       hasNotes
-                        ? "bg-[#2f6b43] group-aria-pressed:bg-white dark:bg-[#8ed081]"
+                        ? "bg-[var(--accent)] group-aria-pressed:bg-[var(--on-active)]"
                         : "bg-transparent"
                     }`}
                     aria-hidden="true"

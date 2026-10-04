@@ -100,9 +100,9 @@ export function DateStrip({
       {isVertical && <div className="text-center text-[9px] py-1" aria-label="Visible month">{visibleMonth}</div>}
       {isVertical ? (
         <>
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-gradient-to-b from-[#f7faf6] to-transparent dark:from-[#11170f]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-gradient-to-b from-[var(--background)] to-transparent" />
           <div
-            className={`pointer-events-none absolute inset-x-0 z-10 h-3 bg-gradient-to-t from-[#f7faf6] to-transparent dark:from-[#11170f] ${
+            className={`pointer-events-none absolute inset-x-0 z-10 h-3 bg-gradient-to-t from-[var(--background)] to-transparent ${
               showCalendar ? "bottom-9" : "bottom-0"
             }`}
           />
@@ -153,16 +153,16 @@ export function DateStrip({
                 onAction={() => onSelectDate(dateKey)}
                 className={
                   isVertical
-                    ? "group flex w-8 shrink-0  flex-col items-center justify-center rounded-md py-1 text-[10px] font-medium text-[#536150] transition hover:bg-[#eef4ec] aria-pressed:bg-[#2f6b43] aria-pressed:text-white dark:text-[#b8c7b4] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#2f6b43] dark:aria-pressed:text-[#ecf3ea]"
-                    : "group flex h-10 w-10 shrink-0  flex-col items-center justify-center rounded-md text-[10px] font-medium text-[#536150] transition hover:bg-[#eef4ec] aria-pressed:bg-[#2f6b43] aria-pressed:text-white dark:text-[#b8c7b4] dark:hover:bg-[#202a1d] dark:aria-pressed:bg-[#2f6b43] dark:aria-pressed:text-[#ecf3ea]"
+                    ? "calendar-date group flex w-8 shrink-0  flex-col items-center justify-center rounded-md py-1 text-[10px] font-medium text-[var(--text-secondary)] transition hover:bg-[var(--hover)] aria-pressed:bg-[var(--active)] aria-pressed:text-[var(--on-active)]"
+                    : "calendar-date group flex h-10 w-10 shrink-0  flex-col items-center justify-center rounded-md text-[10px] font-medium text-[var(--text-secondary)] transition hover:bg-[var(--hover)] aria-pressed:bg-[var(--active)] aria-pressed:text-[var(--on-active)]"
                 }
-                style={isToday && !isSelected ? { boxShadow: "inset 0 0 0 1px #2f6b43" } : undefined}
+                style={isToday && !isSelected ? { boxShadow: "inset 0 0 0 1px var(--accent)" } : undefined}
               >
                 <span className="text-[9px] uppercase leading-none opacity-80">{date.format("dd").charAt(0)}</span>
                 <span className="leading-none">{date.format("D")}</span>
                 {hasNotes ? (
                   <span
-                    className="mt-0.5 h-1 w-1 rounded-full bg-[#2f6b43] group-aria-pressed:bg-white dark:bg-[#8ed081]"
+                    className="mt-0.5 h-1 w-1 rounded-full bg-[var(--accent)] group-aria-pressed:bg-[var(--on-active)]"
                     aria-hidden="true"
                   />
                 ) : (
@@ -182,8 +182,8 @@ export function DateStrip({
           onAction={() => onOpenCalendar?.()}
           className={
             isVertical
-              ? "inline-flex h-8 w-full shrink-0 items-center justify-center border-t border-[#dce5d8] text-[#2f6b43] hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
-              : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#dce5d8] text-[#2f6b43] hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
+              ? "inline-flex h-8 w-full shrink-0 items-center justify-center border-t border-[var(--border)] text-[var(--accent)] hover:bg-[var(--hover)]"
+              : "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--border)] text-[var(--accent)] hover:bg-[var(--hover)]"
           }
         >
           <Calendar size={14} aria-hidden="true" />
