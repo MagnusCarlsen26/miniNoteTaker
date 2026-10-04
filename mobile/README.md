@@ -55,3 +55,53 @@ Use Node 24 or later for the checks (SQLite tests use Node’s built-in SQLite).
 Android is the delivery target. Shared React Native code remains compatible with iPhone; iOS builds, signing, and testing are deferred. Uninstalling the app or clearing its Android storage removes this local notebook. No sync or export is implemented in v0.
 
 For an installed APK on a test emulator, run `python3 scripts/android-smoke.py`. The smoke test uses adb and checks saving, restart persistence, pinning, archive/trash restoration, folder assignment/deletion, permanent deletion confirmation, themes, and calendar editor reset. It creates uniquely named test data and deletes its own completed test notes and folder.
+
+## Android Todo category and widget
+
+Library → Todo is a permanent category, separate from ordinary folders. Choose
+New Todo note to start an empty assigned draft, or Editor → Assign → Todo for an
+existing note. Assignment survives the first save and can coexist with folders.
+Each line starting with `--` (with optional indentation) begins an entry; subsequent
+lines supply details. Empty entries and preamble are ignored. A blank marker uses
+the first nonempty following line as its title. For example:
+
+```text
+-- Buy groceries
+Milk, bread, and coffee
+-- Call the electrician
+Ask about Saturday availability
+```
+
+Long-press the Android home screen → Widgets → Quicknote Todo, then drag it onto
+the launcher. Resize it by long-pressing the placed widget. The card starts at
+approximately 4×3 cells and supports approximately 3×2, depending on the launcher.
+Small cards omit details. Tap the heading or empty state for Todo; tap an entry
+for its source selection, with the keyboard closed until you touch the editor.
+Archived or trashed notes and notes without Todo assignment disappear from both
+views. The widget follows saved appearance settings and reads committed SQLite
+entries even when React Native is stopped. Expo Go supports the Todo app screens
+but cannot load this native widget.
+
+The tracked local Expo module is `modules/quicknote-todo`. Expo autolinking loads
+its Kotlin module and merges its library manifest and resources on a clean native
+build; no widget code belongs in generated `android/`. The database migration
+backfills `todo_entries` transactionally, and saves update only affected Todo
+notes within the source save transaction. Widget refreshes coalesce for 350ms;
+note persistence remains immediate. Refresh failures never undo note saves and
+retry on the next relevant commit, foreground event, or widget update. Stale entry
+taps fall back to Todo after checking current source offsets and text identity.
+
+Validation still required on a newly installed native build (build/prebuild and
+APK generation intentionally not run for this change at the user's request):
+
+- Clean Expo prebuild, native compilation/tests, and APK installation.
+- Launcher placement and picker preview; large scrolling lists, resizing, and multiple instances.
+- Light/Dark/System, large fonts, and TalkBack with complete entry labels.
+- Cold/warm taps, deleted-entry fallback, entry scrolling/selection without a keyboard,
+  and a failed autosave blocking navigation until a successful retry.
+- Editing, pin ordering, assignment removal, archive/trash/restore, process termination,
+  and reboot rendering.
+- App and widget screenshots for review.
+
+Implementation follows Android's [collection widget APIs](https://developer.android.com/develop/ui/views/appwidgets/collections)
+and Expo's [local native-code approach](https://docs.expo.dev/workflow/customizing/).

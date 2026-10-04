@@ -2,3 +2,10 @@
 2. doesn't automatically open the last written note.
 3. sidebar doesn't automatically scroll to the current date when opening the app for first time.
 4. automatically mark note as work by default when creating a new note.
+
+Android Todo follow-ups:
+- Mark entries done from the widget.
+- Quick-create button in the widget.
+- Natural-language date detection.
+- Todo reminders.
+- Todo priorities.
