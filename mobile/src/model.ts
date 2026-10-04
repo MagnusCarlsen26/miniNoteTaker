@@ -5,6 +5,7 @@ export type Note = {
   createdAt: string;
   updatedAt: string;
   pinned: boolean;
+  isTodo: boolean;
   folderIds: string[];
   archivedAt: string | null;
   deletedAt: string | null;
@@ -49,7 +50,12 @@ export class Notebook {
     this.write(next);
     this.state = next;
   }
-  edit(id: string | null, content: string, date?: string): string | null {
+  edit(
+    id: string | null,
+    content: string,
+    date?: string,
+    isTodo = false,
+  ): string | null {
     const timestamp = this.now();
     if (!id) {
       if (!content.trim()) return null;
@@ -63,6 +69,7 @@ export class Notebook {
         createdAt,
         updatedAt: timestamp,
         pinned: false,
+        isTodo,
         folderIds: [],
         archivedAt: null,
         deletedAt: null,
@@ -88,7 +95,7 @@ export class Notebook {
   }
   change(
     id: string,
-    action: "pin" | "archive" | "trash" | "restore" | "delete" | "folders",
+    action: "pin" | "archive" | "trash" | "restore" | "delete" | "folders" | "todo",
     folderIds: string[] = [],
   ) {
     const note = this.state.notes.find((n) => n.id === id);
@@ -104,10 +111,12 @@ export class Notebook {
       });
       return;
     }
-    if (["pin", "archive", "folders"].includes(action) && !active(note))
+    if (["pin", "archive", "folders", "todo"].includes(action) && !active(note))
       throw new Error("Restore this note first.");
     const patch: Partial<Note> =
-      action === "pin"
+      action === "todo"
+        ? { isTodo: !note.isTodo }
+        : action === "pin"
         ? { pinned: !note.pinned, updatedAt: this.now() }
         : action === "archive"
           ? { archivedAt: this.now(), pinned: false }
