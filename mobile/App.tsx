@@ -28,6 +28,7 @@ import {
   type Notebook,
   type Theme,
 } from "./src/model";
+import { StaleNoteError } from "./src/sqliteNotebook";
 import { loadNotebook } from "./src/storage";
 import { resolveTodoNavigation } from "./src/todoNavigation";
 import { todoEntries, type TodoEntry } from "./src/todo";
@@ -69,6 +70,8 @@ function Quicknote() {
   const pendingNavigation = useRef<string | null>(null);
   const navigationHandler = useRef<(url: string) => void>(() => {});
   const [saveError, setSaveError] = useState("");
+  const [conflict, setConflict] = useState(false);
+  const resumeHandler = useRef<() => void>(() => {});
   const [section, setSection] = useState("Recent");
   const [modal, setModal] = useState<"menu" | "folders" | "create" | null>(
     null,
@@ -111,6 +114,7 @@ function Quicknote() {
     const links = Linking.addEventListener("url", ({ url }) => receive(url));
     const lifecycle = AppState.addEventListener("change", (next) => {
       if (next === "active") {
+        resumeHandler.current();
         refreshWidgets();
         receive(pendingWidgetNavigation());
       }
@@ -173,9 +177,36 @@ function Quicknote() {
       refresh((n) => n + 1);
       return true;
     } catch (error) {
+      if (error instanceof StaleNoteError) setConflict(true);
       setSaveError(error instanceof Error ? error.message : String(error));
       return false;
     }
+  };
+  resumeHandler.current = () => {
+    try {
+      const loaded = loadNotebook();
+      const saved = loaded.state.notes.find(n => n.id === noteId);
+      if (saveError) {
+        if (note && JSON.stringify(saved) !== JSON.stringify(note)) setConflict(true);
+      } else {
+        setBook(loaded);
+        setDraft(saved?.content ?? "");
+        if (!saved) setNoteId(null);
+      }
+    } catch (error) { setSaveError(String(error)); }
+  };
+  const resolveConflict = (keep: boolean) => {
+    try {
+      const loaded = loadNotebook();
+      if (keep) {
+        const id = loaded.edit(null, draft, undefined, note?.isTodo ?? draftTodo);
+        setNoteId(id);
+      } else {
+        const saved = loaded.state.notes.find(n => n.id === noteId);
+        setNoteId(saved?.id ?? null); setDraft(saved?.content ?? "");
+      }
+      setBook(loaded); setConflict(false); setSaveError("");
+    } catch (error) { setSaveError(String(error)); }
   };
   const canLeave = () => !saveError || save(draft);
   const newNote = (day?: string, todo = false) => {
@@ -203,10 +234,12 @@ function Quicknote() {
   };
   navigationHandler.current = (url: string) => {
     if (!book || !canLeave()) return;
-    const entry = resolveTodoNavigation(url, book.state.notes);
+    const committed = loadNotebook();
+    setBook(committed);
+    const entry = resolveTodoNavigation(url, committed.state.notes);
     pendingNavigation.current = null;
     setModal(null);
-    if (entry) open(book.state.notes.find((n) => n.id === entry.noteId)!, entry);
+    if (entry) open(committed.state.notes.find((n) => n.id === entry.noteId)!, entry);
     else { Keyboard.dismiss(); setSection("Todo"); setTab("Library"); }
   };
   const change = (
@@ -360,7 +393,10 @@ function Quicknote() {
             <Text accessibilityRole="alert" style={{ color: colors.text }}>
               Not saved: {saveError}
             </Text>
-            {button("Retry save", () => save(draft))}
+            {conflict ? <>
+              {button("Load saved note", () => resolveConflict(false))}
+              {button("Keep draft as new note", () => resolveConflict(true))}
+            </> : button("Retry save", () => save(draft))}
           </View>
         ) : null}
         {tab === "Editor" ? (
@@ -427,7 +463,7 @@ function Quicknote() {
             ) : null}
             {(note?.isTodo || (!note && draftTodo)) && !readOnly ? (
               <Text style={[styles.metadata, { color: colors.muted }]}>
-                Todo · Start each entry with --. Following lines add details.
+                Todo · Start entries with --. Use -- [x] to complete; remove [x] or use [ ] to reopen. Following lines add details.
                 {"\n"}Example: -- Buy groceries{"\n"}Milk, bread, and coffee
               </Text>
             ) : null}

@@ -75,8 +75,19 @@ Ask about Saturday availability
 Long-press the Android home screen → Widgets → Quicknote Todo, then drag it onto
 the launcher. Resize it by long-pressing the placed widget. The card starts at
 approximately 4×3 cells and supports approximately 3×2, depending on the launcher.
-Small cards omit details. Tap the heading or empty state for Todo; tap an entry
+Small cards omit details. Tap the heading or empty state for Todo; tap entry text
 for its source selection, with the keyboard closed until you touch the editor.
+Tap the 48dp circle to mark an entry done; it stays in the source as `-- [x]`
+and disappears from active lists and every widget. `[X]` also means complete;
+remove the token or replace it with `[ ]` to reopen. Completed blocks keep their
+original ordinals and UTF-16 source offsets.
+
+The 48dp **+** button opens a compact native dialog directly over the launcher.
+Enter a nonempty single-line title and optional multiline details. Save creates
+a separate UUID Todo note with no folders, preserving the app’s last-edited
+selection, then dismisses the dialog. Cancel or Back discards the input. Save
+is disabled during submission; failures retain input and offer Retry. A stable
+submission UUID prevents duplicate notes across retries and activity recreation.
 Archived or trashed notes and notes without Todo assignment disappear from both
 views. The widget follows saved appearance settings and reads committed SQLite
 entries even when React Native is stopped. Expo Go supports the Todo app screens
@@ -84,24 +95,40 @@ but cannot load this native widget.
 
 The tracked local Expo module is `modules/quicknote-todo`. Expo autolinking loads
 its Kotlin module and merges its library manifest and resources on a clean native
-build; no widget code belongs in generated `android/`. The database migration
+build; no widget code belongs in generated `android/`. Projection schema v2 rebuilds completed-entry filtering transactionally. The database migration
 backfills `todo_entries` transactionally, and saves update only affected Todo
 notes within the source save transaction. Widget refreshes coalesce for 350ms;
 note persistence remains immediate. Refresh failures never undo note saves and
 retry on the next relevant commit, foreground event, or widget update. Stale entry
 taps fall back to Todo after checking current source offsets and text identity.
 
-Validation still required on a newly installed native build (build/prebuild and
-APK generation intentionally not run for this change at the user's request):
+Native completion validates note ID, ordinal, offset, and fingerprint against
+the committed source inside the same SQLite transaction that updates the note
+and projection. Stale taps only refresh; repeated completion is harmless.
+Native database work runs on a worker thread. The app reloads committed state
+on resume. Changed/deleted source checks prevent cached saves from overwriting
+widget edits; conflicting editor drafts offer **Load saved note** or **Keep draft
+as new note**. Expo Go uses the same app behavior without requiring the module.
 
-- Clean Expo prebuild, native compilation/tests, and APK installation.
+Validation for this change: mobile type checking and 32 frontend tests pass;
+the native module compiled before the final review, and an isolated clean Expo
+prebuild succeeded. Six native unit tests pass, covering shared parser fixtures and SQLite
+mutation behavior. APK assembly was stopped at the user's request; installed
+launcher validation and screenshots remain pending. Run native unit tests with
+`cd android && ./gradlew :quicknote-todo:testDebugUnitTest`.
+
+Validation still required on a newly installed native build:
+
+- APK installation and verification of the final native sources.
 - Launcher placement and picker preview; large scrolling lists, resizing, and multiple instances.
 - Light/Dark/System, large fonts, and TalkBack with complete entry labels.
 - Cold/warm taps, deleted-entry fallback, entry scrolling/selection without a keyboard,
   and a failed autosave blocking navigation until a successful retry.
 - Editing, pin ordering, assignment removal, archive/trash/restore, process termination,
   and reboot rendering.
-- App and widget screenshots for review.
+- Completion, quick creation, cancellation, retry, duplicate-submit prevention,
+  source reopening, and app/native draft conflicts with the app closed and running.
+- Updated widget/dialog screenshots for review.
 
 Implementation follows Android's [collection widget APIs](https://developer.android.com/develop/ui/views/appwidgets/collections)
 and Expo's [local native-code approach](https://docs.expo.dev/workflow/customizing/).
