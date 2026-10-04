@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { Decoration, EditorView, keymap, placeholder } from "@codemirror/view";
 import { MouseEvent, RefObject, useEffect, useRef } from "react";
 
 type NoteEditorProps = {
@@ -78,6 +78,13 @@ export function NoteEditor({
         history(),
         EditorView.lineWrapping,
         editorTheme,
+        EditorView.decorations.compute(["doc"], state => {
+          for (let number = 1; number <= state.doc.lines; number++) {
+            const line = state.doc.line(number);
+            if (line.text.trim()) return Decoration.set([Decoration.line({ class: "note-title-line" }).range(line.from)]);
+          }
+          return Decoration.none;
+        }),
         placeholder(placeholderText),
         keymap.of([
           ...historyKeymap,

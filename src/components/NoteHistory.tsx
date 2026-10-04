@@ -1,206 +1,25 @@
 import dayjs from "dayjs";
-import { Pin, Plus } from "lucide-react";
-import { MouseEvent, useEffect, useMemo, useState } from "react";
-import { previewContent } from "../lib/notePreview";
+import { Plus } from "lucide-react";
+import { useRef, useState } from "react";
+import { presentNote } from "../lib/notePreview";
 import { useNoteStore } from "../store/noteStore";
 import type { Note } from "../types/note";
-
-type NoteHistoryProps = {
-  selectedNoteId: string | null;
-  onSelectNote: (note: Note) => void;
-  onOpenNote?: (note: Note) => void;
-  notesOverride?: Note[];
-  title?: string;
-  emptyTitle?: string;
-  timestampField?: "updated_at" | "deleted_at" | "created_at";
-  ariaLabel?: string;
-  maxVisible?: number;
-  onCreateNote?: () => void;
-  createNoteLabel?: string;
-};
-
-function noteTimestamp(note: Note, timestampField: "updated_at" | "deleted_at" | "created_at") {
-  if (timestampField === "deleted_at") {
-    return note.deleted_at ?? note.updated_at;
-  }
-  if (timestampField === "created_at") {
-    return note.created_at;
-  }
-  return note.updated_at;
-}
-
-function formatRelativeTime(updatedAt: string) {
-  const now = dayjs();
-  const updated = dayjs(updatedAt);
-  const minutes = Math.abs(now.diff(updated, "minute"));
-
-  if (minutes < 1) {
-    return "now";
-  }
-
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
-
-  const hours = Math.abs(now.diff(updated, "hour"));
-  if (hours < 24) {
-    return `${hours}h`;
-  }
-
-  const days = Math.abs(now.diff(updated, "day"));
-  if (days < 30) {
-    return `${days}d`;
-  }
-
-  const months = Math.abs(now.diff(updated, "month"));
-  return `${Math.max(months, 1)} months`;
-}
-
-export function NoteHistory({
-  selectedNoteId,
-  onSelectNote,
-  onOpenNote,
-  notesOverride,
-  title = "Recent",
-  emptyTitle,
-  timestampField = "updated_at",
-  ariaLabel = "Recent notes",
-  maxVisible = 1000,
-  onCreateNote,
-  createNoteLabel = "New note"
-}: NoteHistoryProps) {
-  const storeNotes = useNoteStore((state) => state.notes);
-  const notes = notesOverride ?? storeNotes;
-  const initialIndex = useMemo(() => {
-    if (!selectedNoteId) {
-      return 0;
+import { ActionButton } from "./ActionButton";
+type Props = { selectedNoteId: string | null; onSelectNote: (note: Note) => void; onOpenNote?: (note: Note) => void; notesOverride?: Note[]; title?: string; emptyTitle?: string; timestampField?: "updated_at" | "deleted_at" | "created_at"; ariaLabel?: string; maxVisible?: number; onCreateNote?: () => void; createNoteLabel?: string };
+export function NoteHistory({ selectedNoteId, onSelectNote, onOpenNote, notesOverride, title = "Recent", emptyTitle = "No notes yet", timestampField = "updated_at", ariaLabel = "Recent notes", maxVisible = 1000, onCreateNote, createNoteLabel = "New note" }: Props) {
+  const stored = useNoteStore(state => state.notes);
+  const notes = (notesOverride ?? stored).slice(0, maxVisible);
+  const [focused, setFocused] = useState(0);
+  const rows = useRef<(HTMLButtonElement | null)[]>([]);
+  return <div className="history" role="listbox" aria-label={ariaLabel} tabIndex={0} onKeyDown={event => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault(); const next = Math.max(0, Math.min(notes.length - 1, focused + (event.key === "ArrowDown" ? 1 : -1)));
+      setFocused(next); rows.current[next]?.focus(); rows.current[next]?.scrollIntoView({ block: "nearest" });
     }
-
-    const noteIndex = notes.findIndex((note) => note.id === selectedNoteId);
-    return noteIndex >= 0 ? noteIndex : 0;
-  }, [notes, selectedNoteId]);
-  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
-  const visibleNotes = useMemo(() => notes.slice(0, maxVisible), [maxVisible, notes]);
-
-  useEffect(() => {
-    setSelectedIndex((index) => {
-      const selectedVisibleIndex = visibleNotes.findIndex((note) => note.id === selectedNoteId);
-      if (selectedVisibleIndex >= 0) {
-        return selectedVisibleIndex;
-      }
-
-      return Math.min(index, Math.max(visibleNotes.length - 1, 0));
-    });
-  }, [selectedNoteId, visibleNotes]);
-
-  const header =
-    title || onCreateNote ? (
-      <div className="mb-2 flex items-center justify-between gap-2">
-        {title ? (
-          <div className="min-w-0 truncate text-xs font-medium uppercase text-[#657064] dark:text-[#aeb9aa]">
-            {title}
-          </div>
-        ) : (
-          <span />
-        )}
-        {onCreateNote ? (
-          <button
-            type="button"
-            aria-label={createNoteLabel}
-            onMouseDown={(event) => {
-              if (event.button !== 0) {
-                return;
-              }
-              event.preventDefault();
-              onCreateNote();
-            }}
-            onClick={(event) => event.preventDefault()}
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#dce5d8] text-[#2f6b43] transition hover:bg-[#eef4ec] dark:border-[#2c3628] dark:text-[#9bd38f] dark:hover:bg-[#202a1d]"
-          >
-            <Plus size={14} aria-hidden="true" />
-          </button>
-        ) : null}
-      </div>
-    ) : null;
-
-  if (visibleNotes.length === 0) {
-    return emptyTitle || header ? (
-      <div>
-        {header}
-        {emptyTitle ? (
-          <div className="text-sm text-[#657064] dark:text-[#aeb9aa]">{emptyTitle}</div>
-        ) : null}
-      </div>
-    ) : null;
-  }
-
-  const handleMouseDownSelect = (event: MouseEvent<HTMLButtonElement>, note: Note) => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    onSelectNote(note);
-  };
-
-  return (
-    <div
-      className="border-t border-[#dce5d8] pt-3 dark:border-[#2c3628]"
-      role="listbox"
-      aria-label={ariaLabel}
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          setSelectedIndex((index) => Math.min(index + 1, visibleNotes.length - 1));
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          setSelectedIndex((index) => Math.max(index - 1, 0));
-        }
-        if (event.key === "Enter") {
-          event.preventDefault();
-          const note = visibleNotes[selectedIndex];
-          if (note) {
-            if (onOpenNote) {
-              onOpenNote(note);
-            } else {
-              onSelectNote(note);
-            }
-          }
-        }
-      }}
-    >
-      {header}
-      <div className="grid gap-1">
-        {visibleNotes.map((note, index) => (
-          <button
-            key={note.id}
-            type="button"
-            role="option"
-            aria-selected={note.id === selectedNoteId || index === selectedIndex}
-            onMouseEnter={() => setSelectedIndex(index)}
-            onMouseDown={(event) => handleMouseDownSelect(event, note)}
-            onDoubleClick={() => onOpenNote?.(note)}
-            className="grid h-9 grid-cols-[1fr_auto] items-center gap-3 rounded-md px-2 text-left text-sm text-[#253022] transition hover:bg-[#eef4ec] aria-selected:bg-[#e5eee1] dark:text-[#e2eadf] dark:hover:bg-[#202a1d] dark:aria-selected:bg-[#263220]"
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              {note.pinned ? (
-                <Pin size={13} className="shrink-0 text-[#2f6b43] dark:text-[#8ed081]" aria-hidden="true" />
-              ) : null}
-              <span className="truncate">{previewContent(note.content)}</span>
-              {note.folders.length > 0 ? (
-                <span className="shrink-0 rounded border border-[#dce5d8] px-1 text-[10px] text-[#657064] dark:border-[#2c3628] dark:text-[#aeb9aa]">
-                  {note.folders.length === 1 ? note.folders[0].name : note.folders.length}
-                </span>
-              ) : null}
-            </span>
-            <span className="whitespace-nowrap text-xs text-[#657064] dark:text-[#aeb9aa]">
-              {formatRelativeTime(noteTimestamp(note, timestampField))}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+    if (event.key === "Enter" && notes[focused]) { event.preventDefault(); event.stopPropagation(); (onOpenNote ?? onSelectNote)(notes[focused]); }
+  }}><div className="toolbar"><span className="metadata">{title}</span>{onCreateNote && <ActionButton aria-label={createNoteLabel} onAction={onCreateNote}><Plus size={18} aria-hidden="true" /></ActionButton>}</div>
+    {!notes.length && <p className="empty">{emptyTitle}</p>}
+    {notes.map((note, index) => { const presentation = presentNote(note.content); return <ActionButton key={note.id} ref={element => { rows.current[index] = element; }} role="option" aria-selected={note.id === selectedNoteId} data-note-id={note.id} className="note-row" onFocus={() => setFocused(index)} onAction={() => onSelectNote(note)} onDoubleClick={() => onOpenNote?.(note)}>
+      <span className="row-title">{note.pinned ? "• " : ""}{presentation.title}</span><span className="excerpt">{presentation.excerpt}</span><span className="metadata row-meta"><span>{note.folders.map(folder => folder.name).join(" · ")}</span><time>{dayjs(note[timestampField] ?? note.updated_at).format("MMM D, HH:mm")}</time></span>
+    </ActionButton>; })}</div>;
 }
