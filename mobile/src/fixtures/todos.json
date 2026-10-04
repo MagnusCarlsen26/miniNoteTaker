@@ -1,0 +1,119 @@
+[
+  {
+    "name": "completed, reopened and ordinal gaps",
+    "content": "Preamble 😀\r\n  -- [x] Done\r\nDetails\r\n-- [X] Also done\r\n-- [ ] Open\r\n-- Same\r\n-- Same",
+    "expected": [
+      {
+        "completed": true,
+        "ordinal": 0,
+        "title": "Done",
+        "details": "Details",
+        "text": "Done\nDetails",
+        "start": 13,
+        "end": 37
+      },
+      {
+        "completed": true,
+        "ordinal": 1,
+        "title": "Also done",
+        "details": "",
+        "text": "Also done",
+        "start": 37,
+        "end": 55
+      },
+      {
+        "completed": false,
+        "ordinal": 2,
+        "title": "Open",
+        "details": "",
+        "text": "Open",
+        "start": 55,
+        "end": 68
+      },
+      {
+        "completed": false,
+        "ordinal": 3,
+        "title": "Same",
+        "details": "",
+        "text": "Same",
+        "start": 68,
+        "end": 77
+      },
+      {
+        "completed": false,
+        "ordinal": 4,
+        "title": "Same",
+        "details": "",
+        "text": "Same",
+        "start": 77,
+        "end": 84
+      }
+    ]
+  },
+  {
+    "name": "continuation titles and empty completed blocks",
+    "content": "-- [x]\n\n-- [X]\n Title 😀\n Details\n--\n\nOpen\nBody\n-- ",
+    "expected": [
+      {
+        "completed": true,
+        "ordinal": 1,
+        "title": "Title 😀",
+        "details": "Details",
+        "text": "Title 😀\nDetails",
+        "start": 8,
+        "end": 34
+      },
+      {
+        "completed": false,
+        "ordinal": 2,
+        "title": "Open",
+        "details": "Body",
+        "text": "Open\nBody",
+        "start": 34,
+        "end": 48
+      }
+    ]
+  },
+  {
+    "name": "literal tokens and unicode",
+    "content": "-- [xyz] Literal\n--[ ] Reopen\n--[X] Finish 😀\nDetails\n-- Normal [x]",
+    "expected": [
+      {
+        "completed": false,
+        "ordinal": 0,
+        "title": "[xyz] Literal",
+        "details": "",
+        "text": "[xyz] Literal",
+        "start": 0,
+        "end": 17
+      },
+      {
+        "completed": false,
+        "ordinal": 1,
+        "title": "Reopen",
+        "details": "",
+        "text": "Reopen",
+        "start": 17,
+        "end": 30
+      },
+      {
+        "completed": true,
+        "ordinal": 2,
+        "title": "Finish 😀",
+        "details": "Details",
+        "text": "Finish 😀\nDetails",
+        "start": 30,
+        "end": 54
+      },
+      {
+        "completed": false,
+        "ordinal": 3,
+        "title": "Normal [x]",
+        "details": "",
+        "text": "Normal [x]",
+        "start": 54,
+        "end": 67
+      }
+    ]
+  }
+]

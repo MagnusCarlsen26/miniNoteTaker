@@ -42,3 +42,19 @@ describe("Todo parsing and navigation", () => {
     expect(resolveTodoNavigation("invalid", book.state.notes)).toBeUndefined();
   });
 });
+
+import fixtures from "./fixtures/todos.json";
+it("parses shared native fixtures and keeps completed block ordinals and UTF-16 offsets", () => {
+  for (const fixture of fixtures) {
+    const entries = parseTodos("fixture", fixture.content);
+    expect(entries.map(e => ({ ordinal: e.ordinal, title: e.title, details: e.details,
+      text: e.text, start: e.start, end: e.end, completed: e.completed }))).toEqual(fixture.expected);
+  }
+  const entries = parseTodos("n", fixtures[0].content);
+  expect(entries.map(e => e.completed)).toEqual([true, true, false, false, false]);
+  const book = new Notebook(() => {});
+  const id = book.edit(null, fixtures[0].content, undefined, true)!;
+  expect(todoEntries(book.state.notes).map(e => e.ordinal)).toEqual([2, 3, 4]);
+  book.edit(id, fixtures[0].content.replace("[x]", "[ ]").replace("[X]", ""));
+  expect(todoEntries(book.state.notes)).toHaveLength(5);
+});

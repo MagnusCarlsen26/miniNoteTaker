@@ -19,7 +19,7 @@ function database() {
     },
     getFirstSync: <T>(sql: string) =>
       (connection.prepare(sql).get() as T) ?? null,
-    getAllSync: <T>(sql: string) => connection.prepare(sql).all() as T[],
+    getAllSync: <T>(sql: string, ...params: string[]) => connection.prepare(sql).all(...params) as T[],
     withTransactionSync: (action) => {
       connection.exec("BEGIN");
       try {
@@ -190,4 +190,37 @@ it("retries a failed projection migration without committing a partial backfill 
   connection.exec("DROP TRIGGER reject_backfill");
   expect(openNotebook(db).state).toEqual(book.state);
   expect(db.getAllSync("SELECT title FROM todo_entries")).toEqual([{ title: "Backfill" }]);
+});
+
+it("rejects changed or deleted committed notes without overwriting a native mutation", () => {
+  const { db, connection } = database();
+  const app = openNotebook(db);
+  const id = app.edit(null, "-- Work", undefined, true)!;
+  const native = openNotebook(db);
+  native.edit(id, "-- [x] Work");
+  expect(() => app.edit(id, "-- Unsaved draft")).toThrow("changed outside the app");
+  expect(openNotebook(db).state.notes[0].content).toBe("-- [x] Work");
+  expect(db.getAllSync("SELECT * FROM todo_entries")).toEqual([]);
+  const current = openNotebook(db);
+  connection.exec("DELETE FROM mobile_notes");
+  expect(() => current.edit(id, "Resurrected")).toThrow("changed outside the app");
+  expect(db.getAllSync("SELECT * FROM mobile_notes")).toEqual([]);
+});
+it("rebuilds v1 projections atomically and excludes old completed syntax", () => {
+  const { db, connection } = database();
+  const book = openNotebook(db);
+  const id = book.edit(null, "-- [x] Done\r\nDetails\r\n-- Open", undefined, true)!;
+  connection.exec("UPDATE todo_schema SET version=1");
+  db.runSync("UPDATE todo_entries SET title=? WHERE note_id=?", "Old projection", id);
+  expect(openNotebook(db).state).toEqual(book.state);
+  expect(db.getAllSync("SELECT title,ordinal FROM todo_entries")).toEqual([{ title: "Open", ordinal: 1 }]);
+  expect(db.getFirstSync("SELECT version FROM todo_schema")).toEqual({ version: 2 });
+});
+it("compares parsed native JSON rather than whitespace or escaping", () => {
+  const { db } = database();
+  const book = openNotebook(db);
+  const id = book.edit(null, "-- Unicode 😀 /", undefined, true)!;
+  db.runSync("UPDATE mobile_notes SET data=? WHERE id=?", JSON.stringify(book.state.notes[0], null, 2), id);
+  book.edit(id, "-- Updated");
+  expect(openNotebook(db).state.notes[0].content).toBe("-- Updated");
 });

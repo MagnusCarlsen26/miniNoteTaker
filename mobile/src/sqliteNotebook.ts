@@ -13,7 +13,7 @@ export interface NotebookDatabase {
   execSync(sql: string): void;
   runSync(sql: string, ...params: string[]): unknown;
   getFirstSync<T>(sql: string): T | null;
-  getAllSync<T>(sql: string): T[];
+  getAllSync<T>(sql: string, ...params: string[]): T[];
   withTransactionSync(action: () => void): void;
 }
 const upsertNote =
@@ -38,13 +38,16 @@ function validate(state: State) {
 function project(db: NotebookDatabase, note: Note) {
   db.runSync("DELETE FROM todo_entries WHERE note_id = ?", note.id);
   if (!note.isTodo || !active(note)) return;
-  for (const entry of parseTodos(note.id, note.content)) {
+  for (const entry of parseTodos(note.id, note.content).filter((entry) => !entry.completed)) {
     db.runSync(`INSERT INTO todo_entries
       (id, note_id, ordinal, title, details, text, start_offset, end_offset, pinned, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, entry.id, note.id,
       String(entry.ordinal), entry.title, entry.details, entry.text,
       String(entry.start), String(entry.end), String(Number(note.pinned)), note.updatedAt);
   }
+}
+export class StaleNoteError extends Error {
+  constructor() { super("This note changed outside the app. Choose how to keep your draft."); }
 }
 export function openNotebook(db: NotebookDatabase, onCommitted = () => {}) {
   db.execSync(`PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;
@@ -107,9 +110,10 @@ export function openNotebook(db: NotebookDatabase, onCommitted = () => {}) {
       db.runSync(upsertNote, note.id, JSON.stringify(normalized));
       return normalized;
     });
-    if (!migrated) {
+    if (!migrated || migrated.version < 2) {
+      db.runSync("DELETE FROM todo_entries");
       state.notes.filter((note) => note.isTodo).forEach((note) => project(db, note));
-      db.runSync("INSERT INTO todo_schema (id, version) VALUES (1, 1)");
+      db.runSync("INSERT OR REPLACE INTO todo_schema (id, version) VALUES (1, 2)");
     }
   });
   let previous = state;
@@ -122,6 +126,20 @@ export function openNotebook(db: NotebookDatabase, onCommitted = () => {}) {
     );
     let widgetChanged = previous.theme !== next.theme;
     db.withTransactionSync(() => {
+      // Compare inside the write transaction, before touching any rows.
+      const changedIds = [...new Set([
+        ...[...noteIndex].filter(([id, old]) => nextNotes.get(id) !== old).map(([id]) => id),
+        ...[...nextNotes.keys()].filter(id => !noteIndex.has(id)),
+      ])];
+      const committed = new Map(changedIds.length ? db.getAllSync<{ id: string; data: string }>(
+        `SELECT id, data FROM mobile_notes WHERE id IN (${changedIds.map(() => "?").join(",")})`, ...changedIds,
+      ).map(row => [row.id, JSON.stringify(JSON.parse(row.data))]) : []);
+      for (const [id, old] of noteIndex) {
+        if (nextNotes.get(id) !== old && committed.get(id) !== JSON.stringify(old)) throw new StaleNoteError();
+      }
+      for (const [id] of nextNotes) {
+        if (!noteIndex.has(id) && committed.has(id)) throw new StaleNoteError();
+      }
       // Unchanged objects keep their identity; their content is never serialized.
       next.notes.forEach((note) => {
         if (noteIndex.get(note.id) !== note) {
