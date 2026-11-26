@@ -27,6 +27,20 @@ npm test
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+## Release builds
+
+Run the script for the OS you are building on; installers are not cross-compiled:
+
+| OS | Command | Prerequisites | Output |
+| --- | --- | --- | --- |
+| Linux | `npm run build:linux` | GTK 3, webkit2gtk-4.1, libsoup-3.0, curl, wget, patchelf | `src-tauri/target/release/bundle/deb/`, `src-tauri/target/release/bundle/appimage/` |
+| macOS | `npm run build:macos` | Xcode command line tools | `src-tauri/target/release/bundle/dmg/` |
+| Windows | `npm run build:windows` | Visual Studio Build Tools (MSVC), NSIS | `src-tauri/target/release/bundle/nsis/` |
+
+Each script builds the frontend first and overrides the default `nsis` target in `tauri.conf.json`. Add other formats with `npx tauri build --bundles <format>`, such as `app` or `pkg` on macOS, `msi` (needs WiX v3) on Windows, or `rpm` on Linux. On rolling Linux distributions AppImage bundling can fail when linuxdeploy's bundled `strip` cannot read newer ELF sections; the `.deb` and `src-tauri/target/release/quicknote` binary are still usable.
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds all three platforms on native runners and attaches the installers to a GitHub release.
+
 ## Linux: Arch, Wayland, and Hyprland
 
 Quicknote starts hidden in the tray. On Hyprland/Wayland, app-level global shortcuts may not work because the compositor owns global keybindings. Use Quicknote's CLI show command from a Hyprland bind instead:
